@@ -914,8 +914,10 @@ public class MainActivity extends AppCompatActivity {
                     
                     // 获取 ZIP 密码（如果用户输入了密码则使用用户密码，否则使用派生密码）
                     String finalZipPassword;
+                    boolean isCustomPassword = false;
                     if (zipPassword != null && !zipPassword.isEmpty()) {
                         finalZipPassword = zipPassword;
+                        isCustomPassword = true;
                         Log.d(TAG, "使用用户自定义 ZIP 密码");
                     } else {
                         finalZipPassword = zipPasswordManager.getZipPassword();
@@ -932,6 +934,17 @@ public class MainActivity extends AppCompatActivity {
                         patchFile.delete();
                         encryptedZipFile.renameTo(patchFile);
                         finalPatchFile = patchFile;
+                        
+                        // 如果使用自定义密码，保存密码提示文件
+                        if (isCustomPassword) {
+                            File zipPasswordFile = new File(patchFile.getPath() + ".zippwd");
+                            FileOutputStream fos = new FileOutputStream(zipPasswordFile);
+                            fos.write(("ZIP 密码提示: 使用自定义密码\n" + 
+                                      "注意: 应用补丁时需要输入相同密码\n" +
+                                      "密码长度: " + finalZipPassword.length() + " 字符").getBytes("UTF-8"));
+                            fos.close();
+                            Log.d(TAG, "✓ 已保存 ZIP 密码提示文件");
+                        }
                         
                         Log.d(TAG, "✓ ZIP 密码保护已添加（AES-256）");
                     } else {
@@ -1531,6 +1544,130 @@ public class MainActivity extends AppCompatActivity {
                     setButtonsEnabled(true);
                     tvStatus.setText("✗ 热更新失败: " + message);
                     Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show();
+                });
+            }
+            
+            @Override
+            public void onZipPasswordRequired(File patchFileToDecrypt) {
+                runOnUiThread(() -> {
+                    progressBar.setVisibility(View.GONE);
+                    setButtonsEnabled(true);
+                    // 显示 ZIP 密码输入对话框
+                    showZipPasswordDialog(patchFileToDecrypt);
+                });
+            }
+        });
+    }
+    
+    /**
+     * 显示 ZIP 密码输入对话框
+     */
+    private void showZipPasswordDialog(File patchFile) {
+        // 创建对话框布局
+        android.widget.LinearLayout layout = new android.widget.LinearLayout(this);
+        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        layout.setPadding(50, 40, 50, 10);
+        
+        // 提示文本
+        TextView tvHint = new TextView(this);
+        tvHint.setText("此补丁使用了自定义 ZIP 密码保护，请输入密码：");
+        tvHint.setTextSize(14);
+        tvHint.setPadding(0, 0, 0, 20);
+        layout.addView(tvHint);
+        
+        // 密码输入框
+        android.widget.EditText etZipPassword = new android.widget.EditText(this);
+        etZipPassword.setHint("输入 ZIP 密码");
+        etZipPassword.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        layout.addView(etZipPassword);
+        
+        // 提示信息
+        TextView tvNote = new TextView(this);
+        tvNote.setText("\n💡 提示：\n• 请输入生成补丁时设置的 ZIP 密码\n• 密码用于验证补丁完整性，防止篡改");
+        tvNote.setTextSize(12);
+        tvNote.setTextColor(0xFF666666);
+        layout.addView(tvNote);
+        
+        // 创建对话框
+        new AlertDialog.Builder(this)
+            .setTitle("🔑 ZIP 密码验证")
+            .setView(layout)
+            .setPositiveButton("验证并应用", (d, w) -> {
+                String zipPassword = etZipPassword.getText().toString().trim();
+                
+                if (zipPassword.isEmpty()) {
+                    Toast.makeText(this, "请输入 ZIP 密码", Toast.LENGTH_SHORT).show();
+                    // 重新显示对话框
+                    showZipPasswordDialog(patchFile);
+                    return;
+                }
+                
+                // 使用密码应用补丁
+                applyPatchWithZipPassword(patchFile, zipPassword);
+            })
+            .setNegativeButton("取消", (d, w) -> {
+                tvStatus.setText("已取消应用补丁");
+            })
+            .setCancelable(false)
+            .show();
+    }
+    
+    /**
+     * 使用 ZIP 密码应用补丁
+     */
+    private void applyPatchWithZipPassword(File patchFile, String zipPassword) {
+        tvStatus.setText("正在验证 ZIP 密码...");
+        progressBar.setProgress(0);
+        progressBar.setVisibility(View.VISIBLE);
+        setButtonsEnabled(false);
+
+        hotUpdateHelper.applyPatchWithZipPassword(patchFile, zipPassword, new HotUpdateHelper.Callback() {
+            @Override
+            public void onProgress(int percent, String message) {
+                runOnUiThread(() -> {
+                    progressBar.setProgress(percent);
+                    tvStatus.setText(message);
+                });
+            }
+
+            @Override
+            public void onSuccess(HotUpdateHelper.PatchResult result) {
+                runOnUiThread(() -> {
+                    progressBar.setVisibility(View.GONE);
+                    setButtonsEnabled(true);
+                    tvStatus.setText("🔥 热更新成功!");
+                    
+                    // 更新版本显示
+                    tvVersion.setText("v" + result.patchVersion + " (热更新)");
+                    
+                    // 显示清除按钮
+                    btnClearPatch.setVisibility(View.VISIBLE);
+                    
+                    // 显示结果
+                    showRealHotUpdateResult(result);
+                });
+            }
+
+            @Override
+            public void onError(String message) {
+                runOnUiThread(() -> {
+                    progressBar.setVisibility(View.GONE);
+                    setButtonsEnabled(true);
+                    tvStatus.setText("✗ 热更新失败: " + message);
+                    
+                    // 如果是密码错误，提示用户重新输入
+                    if (message.contains("密码") || message.contains("验证失败")) {
+                        new AlertDialog.Builder(MainActivity.this)
+                            .setTitle("⚠️ 密码错误")
+                            .setMessage(message + "\n\n是否重新输入密码？")
+                            .setPositiveButton("重新输入", (d, w) -> {
+                                showZipPasswordDialog(patchFile);
+                            })
+                            .setNegativeButton("取消", null)
+                            .show();
+                    } else {
+                        Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show();
+                    }
                 });
             }
         });

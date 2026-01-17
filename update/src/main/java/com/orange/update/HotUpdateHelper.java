@@ -121,130 +121,37 @@ public class HotUpdateHelper {
                         callback.onProgress(15, "验证 ZIP 密码...");
                     }
                     
-                    // 获取 ZIP 密码
+                    // 检查是否有密码提示文件（.zippwd）
+                    File zipPasswordFile = new File(patchFile.getPath() + ".zippwd");
+                    boolean hasCustomPassword = zipPasswordFile.exists();
+                    
+                    if (hasCustomPassword) {
+                        Log.d(TAG, "检测到自定义 ZIP 密码，需要用户输入");
+                        
+                        // 通知 UI 需要用户输入密码
+                        if (callback != null) {
+                            callback.onZipPasswordRequired(patchFile);
+                        }
+                        return; // 等待用户输入密码后调用 applyPatchWithZipPassword()
+                    }
+                    
+                    // 使用派生密码
                     String zipPassword = zipPasswordManager.getZipPassword();
+                    Log.d(TAG, "使用派生密码验证 ZIP");
                     
-                    // 验证密码
-                    boolean passwordValid = zipPasswordManager.verifyPassword(patchFile, zipPassword);
-                    
-                    if (!passwordValid) {
-                        if (callback != null) {
-                            callback.onError("⚠️ ZIP 密码验证失败！补丁可能已被篡改。");
-                        }
-                        return;
+                    // 验证并解密
+                    actualPatchFile = decryptZipPatch(patchFile, zipPassword, callback);
+                    if (actualPatchFile == null) {
+                        return; // 解密失败，已通过 callback 报错
                     }
-                    
-                    Log.d(TAG, "✓ ZIP 密码验证成功");
-                    
-                    if (callback != null) {
-                        callback.onProgress(18, "解密 ZIP 文件...");
-                    }
-                    
-                    // 解密 ZIP 到临时文件
-                    File tempDir = new File(context.getCacheDir(), "patch_decrypt_" + System.currentTimeMillis());
-                    tempDir.mkdirs();
-                    
-                    boolean extracted = zipPasswordManager.extractEncryptedZip(patchFile, tempDir, zipPassword);
-                    
-                    if (!extracted) {
-                        if (callback != null) {
-                            callback.onError("ZIP 解密失败");
-                        }
-                        // 清理临时目录
-                        deleteDirectory(tempDir);
-                        return;
-                    }
-                    
-                    // 重新打包为未加密的 ZIP（临时文件）
-                    File decryptedZip = new File(context.getCacheDir(), "patch_decrypted_" + System.currentTimeMillis() + ".zip");
-                    repackZip(tempDir, decryptedZip);
-                    
-                    // 使用解密后的文件
-                    actualPatchFile = decryptedZip;
-                    
-                    // 清理临时目录
-                    deleteDirectory(tempDir);
-                    
-                    Log.d(TAG, "✓ ZIP 解密完成");
                 }
                 
                 if (callback != null) {
                     callback.onProgress(20, "准备应用补丁...");
                 }
                 
-                // 3. 创建 PatchInfo
-                PatchInfo patchInfo = createPatchInfo(actualPatchFile);
-                
-                if (callback != null) {
-                    callback.onProgress(25, "验证补丁文件...");
-                }
-                
-                // 4. 读取补丁文件内容
-                byte[] patchData = readFileToBytes(actualPatchFile);
-                if (patchData == null) {
-                    if (callback != null) {
-                        callback.onError("读取补丁文件失败");
-                    }
-                    return;
-                }
-                
-                // 5. 保存补丁文件到存储
-                boolean saved = storage.savePatchFile(patchInfo.getPatchId(), patchData);
-                if (!saved) {
-                    if (callback != null) {
-                        callback.onError("保存补丁文件失败");
-                    }
-                    return;
-                }
-                
-                if (callback != null) {
-                    callback.onProgress(40, "应用补丁...");
-                }
-                
-                // 6. 应用补丁（PatchApplier 会自动处理解密和资源合并）
-                // 检查是否包含资源，如果包含则显示资源合并进度
-                boolean hasResources = hasResourcePatch(actualPatchFile);
-                if (hasResources && callback != null) {
-                    callback.onProgress(50, "合并资源文件...");
-                }
-                
-                boolean success = applier.apply(patchInfo);
-                
-                if (success) {
-                    if (hasResources && callback != null) {
-                        callback.onProgress(80, "资源合并完成");
-                    }
-                    
-                    // 获取补丁信息
-                    PatchInfo appliedPatch = storage.getAppliedPatchInfo();
-                    
-                    // 创建结果
-                    PatchResult result = new PatchResult();
-                    result.success = true;
-                    result.patchId = appliedPatch != null ? appliedPatch.getPatchId() : null;
-                    result.patchVersion = appliedPatch != null ? appliedPatch.getPatchVersion() : null;
-                    result.patchSize = patchFile.length();
-                    
-                    // 检查补丁内容类型
-                    result.dexInjected = DexPatcher.isSupported(); // DEX 热更新是否支持
-                    result.soLoaded = false; // SO 库加载状态（暂不支持检测）
-                    result.resourcesLoaded = hasResourcePatch(actualPatchFile); // 检查是否包含资源
-                    result.needsRestart = result.resourcesLoaded; // 资源更新需要重启
-                    
-                    if (callback != null) {
-                        callback.onProgress(100, "热更新完成！");
-                        callback.onSuccess(result);
-                    }
-                } else {
-                    if (callback != null) {
-                        callback.onError("补丁应用失败");
-                    }
-                }
-                
-                // 清理临时解密文件
-                if (actualPatchFile != patchFile && actualPatchFile.exists()) {
-                    actualPatchFile.delete();
-                }
+                // 3. 继续应用补丁流程
+                applyPatchInternal(actualPatchFile, patchFile, callback);
                 
             } catch (Exception e) {
                 Log.e(TAG, "应用补丁失败", e);
@@ -641,6 +548,19 @@ public class HotUpdateHelper {
          * @param message 错误消息
          */
         void onError(String message);
+        
+        /**
+         * 需要 ZIP 密码回调
+         * 
+         * 当检测到补丁使用了自定义 ZIP 密码时调用此方法。
+         * UI 应该弹出对话框让用户输入密码，然后调用 applyPatchWithZipPassword() 继续应用补丁。
+         * 
+         * @param patchFile 补丁文件
+         */
+        default void onZipPasswordRequired(File patchFile) {
+            // 默认实现：不处理，直接报错
+            onError("补丁需要 ZIP 密码，但未提供密码输入接口");
+        }
     }
     
     /**
@@ -691,6 +611,228 @@ public class HotUpdateHelper {
                     ", resourcesLoaded=" + resourcesLoaded +
                     ", needsRestart=" + needsRestart +
                     '}';
+        }
+    }
+    
+    /**
+     * 应用补丁（使用自定义 ZIP 密码）
+     * 
+     * 当 onZipPasswordRequired() 被调用后，UI 应该获取用户输入的密码，
+     * 然后调用此方法继续应用补丁。
+     * 
+     * @param patchFile 补丁文件
+     * @param zipPassword 用户输入的 ZIP 密码
+     * @param callback 回调接口
+     */
+    public void applyPatchWithZipPassword(File patchFile, String zipPassword, Callback callback) {
+        if (patchFile == null || !patchFile.exists()) {
+            if (callback != null) {
+                callback.onError("补丁文件不存在");
+            }
+            return;
+        }
+        
+        if (zipPassword == null || zipPassword.isEmpty()) {
+            if (callback != null) {
+                callback.onError("ZIP 密码不能为空");
+            }
+            return;
+        }
+        
+        executor.execute(() -> {
+            try {
+                // 通知开始
+                if (callback != null) {
+                    callback.onProgress(5, "准备应用补丁...");
+                }
+                
+                // 1. 检查安全策略
+                String securityError = checkSecurityPolicy(patchFile);
+                if (securityError != null) {
+                    if (callback != null) {
+                        callback.onError(securityError);
+                    }
+                    return;
+                }
+                
+                if (callback != null) {
+                    callback.onProgress(10, "验证 ZIP 密码...");
+                }
+                
+                // 2. 解密 ZIP
+                ZipPasswordManager zipPasswordManager = storage.getZipPasswordManager();
+                File actualPatchFile = decryptZipPatch(patchFile, zipPassword, callback);
+                
+                if (actualPatchFile == null) {
+                    return; // 解密失败，已通过 callback 报错
+                }
+                
+                // 3. 继续应用补丁流程
+                applyPatchInternal(actualPatchFile, patchFile, callback);
+                
+            } catch (Exception e) {
+                Log.e(TAG, "应用补丁失败", e);
+                if (callback != null) {
+                    callback.onError("应用补丁失败: " + e.getMessage());
+                }
+            }
+        });
+    }
+    
+    /**
+     * 解密 ZIP 补丁
+     * 
+     * @param patchFile 补丁文件
+     * @param zipPassword ZIP 密码
+     * @param callback 回调接口
+     * @return 解密后的补丁文件，如果失败返回 null
+     */
+    private File decryptZipPatch(File patchFile, String zipPassword, Callback callback) {
+        try {
+            ZipPasswordManager zipPasswordManager = storage.getZipPasswordManager();
+            
+            // 验证密码
+            boolean passwordValid = zipPasswordManager.verifyPassword(patchFile, zipPassword);
+            
+            if (!passwordValid) {
+                if (callback != null) {
+                    callback.onError("⚠️ ZIP 密码验证失败！密码错误或补丁已被篡改。");
+                }
+                return null;
+            }
+            
+            Log.d(TAG, "✓ ZIP 密码验证成功");
+            
+            if (callback != null) {
+                callback.onProgress(18, "解密 ZIP 文件...");
+            }
+            
+            // 解密 ZIP 到临时文件
+            File tempDir = new File(context.getCacheDir(), "patch_decrypt_" + System.currentTimeMillis());
+            tempDir.mkdirs();
+            
+            boolean extracted = zipPasswordManager.extractEncryptedZip(patchFile, tempDir, zipPassword);
+            
+            if (!extracted) {
+                if (callback != null) {
+                    callback.onError("ZIP 解密失败");
+                }
+                // 清理临时目录
+                deleteDirectory(tempDir);
+                return null;
+            }
+            
+            // 重新打包为未加密的 ZIP（临时文件）
+            File decryptedZip = new File(context.getCacheDir(), "patch_decrypted_" + System.currentTimeMillis() + ".zip");
+            repackZip(tempDir, decryptedZip);
+            
+            // 清理临时目录
+            deleteDirectory(tempDir);
+            
+            Log.d(TAG, "✓ ZIP 解密完成");
+            return decryptedZip;
+            
+        } catch (Exception e) {
+            Log.e(TAG, "解密 ZIP 失败", e);
+            if (callback != null) {
+                callback.onError("解密 ZIP 失败: " + e.getMessage());
+            }
+            return null;
+        }
+    }
+    
+    /**
+     * 应用补丁的内部实现（在 ZIP 解密之后）
+     * 
+     * @param actualPatchFile 实际的补丁文件（可能是解密后的）
+     * @param originalPatchFile 原始补丁文件
+     * @param callback 回调接口
+     */
+    private void applyPatchInternal(File actualPatchFile, File originalPatchFile, Callback callback) {
+        try {
+            if (callback != null) {
+                callback.onProgress(20, "准备应用补丁...");
+            }
+            
+            // 3. 创建 PatchInfo
+            PatchInfo patchInfo = createPatchInfo(actualPatchFile);
+            
+            if (callback != null) {
+                callback.onProgress(25, "验证补丁文件...");
+            }
+            
+            // 4. 读取补丁文件内容
+            byte[] patchData = readFileToBytes(actualPatchFile);
+            if (patchData == null) {
+                if (callback != null) {
+                    callback.onError("读取补丁文件失败");
+                }
+                return;
+            }
+            
+            // 5. 保存补丁文件到存储
+            boolean saved = storage.savePatchFile(patchInfo.getPatchId(), patchData);
+            if (!saved) {
+                if (callback != null) {
+                    callback.onError("保存补丁文件失败");
+                }
+                return;
+            }
+            
+            if (callback != null) {
+                callback.onProgress(40, "应用补丁...");
+            }
+            
+            // 6. 应用补丁（PatchApplier 会自动处理解密和资源合并）
+            // 检查是否包含资源，如果包含则显示资源合并进度
+            boolean hasResources = hasResourcePatch(actualPatchFile);
+            if (hasResources && callback != null) {
+                callback.onProgress(50, "合并资源文件...");
+            }
+            
+            boolean success = applier.apply(patchInfo);
+            
+            if (success) {
+                if (hasResources && callback != null) {
+                    callback.onProgress(80, "资源合并完成");
+                }
+                
+                // 获取补丁信息
+                PatchInfo appliedPatch = storage.getAppliedPatchInfo();
+                
+                // 创建结果
+                PatchResult result = new PatchResult();
+                result.success = true;
+                result.patchId = appliedPatch != null ? appliedPatch.getPatchId() : null;
+                result.patchVersion = appliedPatch != null ? appliedPatch.getPatchVersion() : null;
+                result.patchSize = originalPatchFile.length();
+                
+                // 检查补丁内容类型
+                result.dexInjected = DexPatcher.isSupported(); // DEX 热更新是否支持
+                result.soLoaded = false; // SO 库加载状态（暂不支持检测）
+                result.resourcesLoaded = hasResourcePatch(actualPatchFile); // 检查是否包含资源
+                result.needsRestart = result.resourcesLoaded; // 资源更新需要重启
+                
+                if (callback != null) {
+                    callback.onProgress(100, "热更新完成！");
+                    callback.onSuccess(result);
+                }
+            } else {
+                if (callback != null) {
+                    callback.onError("补丁应用失败");
+                }
+            }
+            
+            // 清理临时解密文件
+            if (actualPatchFile != originalPatchFile && actualPatchFile.exists()) {
+                actualPatchFile.delete();
+            }
+            
+        } catch (Exception e) {
+            Log.e(TAG, "应用补丁失败", e);
+            if (callback != null) {
+                callback.onError("应用补丁失败: " + e.getMessage());
+            }
         }
     }
     
