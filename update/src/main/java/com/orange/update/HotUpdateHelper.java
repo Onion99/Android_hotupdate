@@ -232,6 +232,47 @@ public class HotUpdateHelper {
     }
     
     /**
+     * 检查 DEX 是否已注入
+     * 
+     * @return 是否已注入 DEX
+     */
+    public boolean isDexInjected() {
+        return hasAppliedPatch() && DexPatcher.isSupported();
+    }
+    
+    /**
+     * 获取补丁后的版本号
+     * 
+     * @return 补丁版本号，如果没有返回 null
+     */
+    public String getPatchedVersion() {
+        PatchInfo patchInfo = storage.getAppliedPatchInfo();
+        return patchInfo != null ? patchInfo.getPatchVersion() : null;
+    }
+    
+    /**
+     * 获取补丁后的版本代码
+     * 
+     * @return 补丁版本代码，如果没有返回 null
+     */
+    public String getPatchedVersionCode() {
+        PatchInfo patchInfo = storage.getAppliedPatchInfo();
+        if (patchInfo != null && patchInfo.getTargetAppVersion() != null) {
+            return patchInfo.getTargetAppVersion();
+        }
+        return null;
+    }
+    
+    /**
+     * 检查是否有已应用的补丁（别名方法，兼容旧API）
+     * 
+     * @return 是否有已应用的补丁
+     */
+    public boolean isPatchApplied() {
+        return hasAppliedPatch();
+    }
+    
+    /**
      * 获取显示版本
      * 
      * @param originalVersion 原始版本号

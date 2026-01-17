@@ -68,7 +68,7 @@ public class MainActivity extends AppCompatActivity {
     private Button btnSelectPatch;
 
     private AndroidPatchGenerator generator;
-    private RealHotUpdate realHotUpdate;
+    private HotUpdateHelper hotUpdateHelper;
     private Button btnClearPatch;
     private Button btnVerifySuccess;
     private Button btnVerifyFail;
@@ -113,11 +113,11 @@ public class MainActivity extends AppCompatActivity {
             outputDir.mkdirs();
         }
 
-        // 初始化真正的热更新
-        realHotUpdate = new RealHotUpdate(this);
+        // 初始化热更新助手
+        hotUpdateHelper = new HotUpdateHelper(this);
         
         // 应用启动时加载已应用的补丁
-        realHotUpdate.loadAppliedPatch();
+        hotUpdateHelper.loadAppliedPatch();
 
         initFilePicker();
         initViews();
@@ -201,16 +201,16 @@ public class MainActivity extends AppCompatActivity {
         
         try {
             PackageInfo pInfo = getPackageManager().getPackageInfo(getPackageName(), 0);
-            String displayVersion = realHotUpdate.getDisplayVersion(pInfo.versionName);
+            String displayVersion = hotUpdateHelper.getDisplayVersion(pInfo.versionName);
             tvVersion.setText("v" + displayVersion);
             info.append("版本: ").append(displayVersion).append("\n");
             
             // 显示热更新状态
-            if (realHotUpdate.isPatchApplied()) {
+            if (hotUpdateHelper.isPatchApplied()) {
                 info.append("\n🔥 热更新状态: 已应用\n");
-                info.append("补丁版本: ").append(realHotUpdate.getPatchedVersion()).append("\n");
-                info.append("DEX 注入: ").append(realHotUpdate.isDexInjected() ? "✓" : "✗").append("\n");
-                long patchTime = realHotUpdate.getPatchTime();
+                info.append("补丁版本: ").append(hotUpdateHelper.getPatchedVersion()).append("\n");
+                info.append("DEX 注入: ").append(hotUpdateHelper.isDexInjected() ? "✓" : "✗").append("\n");
+                long patchTime = hotUpdateHelper.getPatchTime();
                 if (patchTime > 0) {
                     java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.getDefault());
                     info.append("应用时间: ").append(sdf.format(new java.util.Date(patchTime))).append("\n");
@@ -224,7 +224,7 @@ public class MainActivity extends AppCompatActivity {
             tvVersion.setText("版本未知");
         }
         
-        info.append("\n").append(realHotUpdate.getCompatibilityInfo()).append("\n");
+        info.append("\n").append(hotUpdateHelper.getCompatibilityInfo()).append("\n");
         info.append("\nNative 引擎: ").append(AndroidPatchGenerator.isNativeEngineAvailable() ? "✓ 可用" : "✗ 不可用").append("\n");
         info.append("\n输出目录:\n").append(outputDir.getAbsolutePath()).append("\n");
         info.append("\n=== 使用说明 ===\n");
@@ -1358,7 +1358,7 @@ public class MainActivity extends AppCompatActivity {
         progressBar.setVisibility(View.VISIBLE);
         setButtonsEnabled(false);
 
-        realHotUpdate.applyPatch(patchFile, new RealHotUpdate.ApplyCallback() {
+        hotUpdateHelper.applyPatch(patchFile, new HotUpdateHelper.Callback() {
             @Override
             public void onProgress(int percent, String message) {
                 runOnUiThread(() -> {
@@ -1368,14 +1368,14 @@ public class MainActivity extends AppCompatActivity {
             }
 
             @Override
-            public void onSuccess(RealHotUpdate.PatchResult result) {
+            public void onSuccess(HotUpdateHelper.PatchResult result) {
                 runOnUiThread(() -> {
                     progressBar.setVisibility(View.GONE);
                     setButtonsEnabled(true);
                     tvStatus.setText("🔥 热更新成功!");
                     
                     // 更新版本显示
-                    tvVersion.setText("v" + result.newVersion + " (热更新)");
+                    tvVersion.setText("v" + result.patchVersion + " (热更新)");
                     
                     // 显示清除按钮
                     btnClearPatch.setVisibility(View.VISIBLE);
@@ -1405,7 +1405,7 @@ public class MainActivity extends AppCompatActivity {
             .setTitle("清除补丁")
             .setMessage("确定要清除已应用的补丁吗？\n\n注意：清除后需要重启应用才能完全回滚到原版本。")
             .setPositiveButton("确定", (d, w) -> {
-                realHotUpdate.clearPatch();
+                hotUpdateHelper.clearPatch();
                 btnClearPatch.setVisibility(View.GONE);
                 
                 // 刷新显示
@@ -1424,7 +1424,7 @@ public class MainActivity extends AppCompatActivity {
             .show();
     }
 
-    private void showRealHotUpdateResult(RealHotUpdate.PatchResult result) {
+    private void showRealHotUpdateResult(HotUpdateHelper.PatchResult result) {
         StringBuilder info = new StringBuilder();
         info.append("=== 🔥 热更新成功 ===\n\n");
         
@@ -1433,8 +1433,12 @@ public class MainActivity extends AppCompatActivity {
         if (result.oldVersion != null) {
             info.append("原版本: ").append(result.oldVersion).append("\n");
         }
-        info.append("新版本: ").append(result.newVersion).append("\n");
-        info.append("版本号: ").append(result.newVersionCode).append("\n\n");
+        info.append("新版本: ").append(result.patchVersion).append("\n");
+        if (result.newVersionCode != null) {
+            info.append("版本号: ").append(result.newVersionCode).append("\n\n");
+        } else {
+            info.append("\n");
+        }
         
         info.append("补丁大小: ").append(formatSize(result.patchSize)).append("\n\n");
         
@@ -1445,7 +1449,7 @@ public class MainActivity extends AppCompatActivity {
         
         info.append("=== 热更新说明 ===\n");
         info.append("✓ 版本已从 ").append(result.oldVersion != null ? result.oldVersion : "原版本");
-        info.append(" 更新到 ").append(result.newVersion).append("\n");
+        info.append(" 更新到 ").append(result.patchVersion).append("\n");
         info.append("✓ 无需重新安装 APK\n");
         
         if (result.dexInjected) {
@@ -2254,9 +2258,8 @@ public class MainActivity extends AppCompatActivity {
      * 显示安全设置对话框
      */
     private void showSecuritySettingsDialog() {
-        android.content.SharedPreferences securityPrefs = getSharedPreferences(PREFS_SECURITY, MODE_PRIVATE);
-        boolean requireSignature = securityPrefs.getBoolean(KEY_REQUIRE_SIGNATURE, false);
-        boolean requireEncryption = securityPrefs.getBoolean(KEY_REQUIRE_ENCRYPTION, false);
+        boolean requireSignature = hotUpdateHelper.isRequireSignature();
+        boolean requireEncryption = hotUpdateHelper.isRequireEncryption();
         
         // 创建对话框布局
         android.widget.LinearLayout layout = new android.widget.LinearLayout(this);
@@ -2315,11 +2318,9 @@ public class MainActivity extends AppCompatActivity {
                 boolean newRequireSignature = cbRequireSignature.isChecked();
                 boolean newRequireEncryption = cbRequireEncryption.isChecked();
                 
-                // 保存设置
-                securityPrefs.edit()
-                    .putBoolean(KEY_REQUIRE_SIGNATURE, newRequireSignature)
-                    .putBoolean(KEY_REQUIRE_ENCRYPTION, newRequireEncryption)
-                    .apply();
+                // 保存设置到 HotUpdateHelper
+                hotUpdateHelper.setRequireSignature(newRequireSignature);
+                hotUpdateHelper.setRequireEncryption(newRequireEncryption);
                 
                 // 显示当前策略
                 StringBuilder status = new StringBuilder("✓ 安全策略已更新\n\n");
