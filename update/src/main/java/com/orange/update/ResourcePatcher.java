@@ -17,6 +17,8 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
+import androidx.annotation.RequiresApi;
+
 /**
  * 资源补丁器，负责将补丁资源加载到应用中。
  * 
@@ -96,6 +98,9 @@ public class ResourcePatcher {
     
     /**
      * 标准资源加载方案 (Android 5.0-6.0, API 21-23)
+     * 
+     * Tinker 的方式：只添加补丁资源路径（补丁已经是完整的资源包）
+     * 不添加原始 APK 路径！
      */
     private static void loadPatchResourcesStandard(Context context, String patchResourcePath) 
             throws Exception {
@@ -107,20 +112,13 @@ public class ResourcePatcher {
                 METHOD_ADD_ASSET_PATH, String.class);
         addAssetPathMethod.setAccessible(true);
         
-        // 先添加原始 APK 路径
-        int result1 = (int) addAssetPathMethod.invoke(newAssetManager, 
-                context.getPackageResourcePath());
-        if (result1 == 0) {
-            throw new PatchResourceException(UpdateErrorCode.ERROR_APPLY_FAILED,
-                    "Failed to add original APK path to AssetManager");
-        }
-        
-        // 再添加补丁资源路径
-        int result2 = (int) addAssetPathMethod.invoke(newAssetManager, patchResourcePath);
-        if (result2 == 0) {
+        // 只添加补丁资源路径（补丁已经是完整的资源包）
+        int result = (int) addAssetPathMethod.invoke(newAssetManager, patchResourcePath);
+        if (result == 0) {
             throw new PatchResourceException(UpdateErrorCode.ERROR_APPLY_FAILED,
                     "Failed to add patch resource path to AssetManager");
         }
+        Log.d(TAG, "Added patch resource path, result: " + result);
         
         // 3. 确保字符串块已加载
         ensureStringBlocks(newAssetManager);
@@ -142,19 +140,27 @@ public class ResourcePatcher {
     /**
      * Android 7.0+ 资源加载方案 (API 24-27)
      * 需要处理 ResourcesImpl
+     * 
+     * Tinker 的方式：只添加补丁资源路径（补丁已经是完整的资源包）
+     * 不添加原始 APK 路径！
      */
     private static void loadPatchResourcesForN(Context context, String patchResourcePath) 
             throws Exception {
         // 1. 创建新的 AssetManager
         AssetManager newAssetManager = AssetManager.class.newInstance();
         
-        // 2. 添加资源路径
+        // 2. 添加资源路径 - 只添加补丁！
         Method addAssetPathMethod = AssetManager.class.getDeclaredMethod(
                 METHOD_ADD_ASSET_PATH, String.class);
         addAssetPathMethod.setAccessible(true);
         
-        addAssetPathMethod.invoke(newAssetManager, context.getPackageResourcePath());
-        addAssetPathMethod.invoke(newAssetManager, patchResourcePath);
+        // 只添加补丁资源路径（补丁已经是完整的资源包）
+        int result = (int) addAssetPathMethod.invoke(newAssetManager, patchResourcePath);
+        if (result == 0) {
+            throw new PatchResourceException(UpdateErrorCode.ERROR_APPLY_FAILED,
+                    "Failed to add patch resource path to AssetManager");
+        }
+        Log.d(TAG, "Added patch resource path, result: " + result);
         
         // 3. 确保字符串块已加载
         ensureStringBlocks(newAssetManager);
@@ -162,33 +168,384 @@ public class ResourcePatcher {
         // 4. 替换 ResourcesImpl 中的 AssetManager
         replaceResourcesImplAssets(context, newAssetManager);
         
+        // 5. 修改 LoadedApk 的 mResDir
+        replaceLoadedApkResDir(context, patchResourcePath);
+        
+        // 6. 修改 ApplicationInfo.publicSourceDir
+        try {
+            Field publicSourceDirField = context.getApplicationInfo().getClass().getDeclaredField("publicSourceDir");
+            publicSourceDirField.setAccessible(true);
+            publicSourceDirField.set(context.getApplicationInfo(), patchResourcePath);
+            Log.d(TAG, "Updated ApplicationInfo.publicSourceDir");
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to update publicSourceDir: " + e.getMessage());
+        }
+        
         Log.d(TAG, "Patch resources loaded (Android N method)");
     }
     
     /**
      * Android 9.0+ 资源加载方案 (API 28+)
      * 需要处理 ResourcesManager 缓存
+     * 
+     * 关键：Tinker 的方式是只添加补丁资源路径（补丁是完整的资源包）
+     * 不添加原始 APK 路径！
      */
     private static void loadPatchResourcesForP(Context context, String patchResourcePath) 
             throws Exception {
         // 1. 创建新的 AssetManager
         AssetManager newAssetManager = AssetManager.class.newInstance();
         
-        // 2. 添加资源路径
+        // 2. 添加资源路径 - 只添加补丁！（Tinker 的方式）
         Method addAssetPathMethod = AssetManager.class.getDeclaredMethod(
                 METHOD_ADD_ASSET_PATH, String.class);
         addAssetPathMethod.setAccessible(true);
         
-        addAssetPathMethod.invoke(newAssetManager, context.getPackageResourcePath());
-        addAssetPathMethod.invoke(newAssetManager, patchResourcePath);
+        // 只添加补丁资源路径（补丁已经是完整的资源包）
+        int result = (int) addAssetPathMethod.invoke(newAssetManager, patchResourcePath);
+        Log.d(TAG, "Added patch resource path, result: " + result);
+        
+        if (result == 0) {
+            throw new PatchResourceException(UpdateErrorCode.ERROR_APPLY_FAILED,
+                    "Failed to add patch resource path to AssetManager");
+        }
         
         // 3. 确保字符串块已加载
         ensureStringBlocks(newAssetManager);
         
-        // 4. 清理 ResourcesManager 缓存并替换 AssetManager
-        clearResourcesManagerCache(context, newAssetManager);
+        // 4. 替换所有 Resources 中的 AssetManager (Android 10+ 方式)
+        replaceAllResourcesAssetManager(context, newAssetManager, patchResourcePath);
         
-        Log.d(TAG, "Patch resources loaded (Android P method)");
+        Log.d(TAG, "Patch resources loaded (Android P+ method)");
+    }
+    
+    /**
+     * 替换所有 Resources 中的 AssetManager (Android 10+ 专用)
+     * 
+     * 参考 Tinker 的实现：
+     * 1. 修改 LoadedApk 的 mResDir
+     * 2. 清空 ResourcesManager 缓存
+     * 3. 替换所有 ResourcesImpl 中的 AssetManager
+     * 4. 替换所有 Resources 中的 AssetManager
+     * 5. 调用 updateConfiguration 强制刷新
+     * 6. 修改 ApplicationInfo.publicSourceDir
+     */
+    private static void replaceAllResourcesAssetManager(Context context, AssetManager newAssetManager, String patchResourcePath) 
+            throws Exception {
+        try {
+            // ===== Tinker 步骤 1: 修改 LoadedApk 的 mResDir =====
+            replaceLoadedApkResDir(context, patchResourcePath);
+            
+            // 获取 ResourcesManager 单例
+            Class<?> resourcesManagerClass = Class.forName("android.app.ResourcesManager");
+            Method getInstanceMethod = resourcesManagerClass.getDeclaredMethod("getInstance");
+            getInstanceMethod.setAccessible(true);
+            Object resourcesManager = getInstanceMethod.invoke(null);
+            
+            if (resourcesManager == null) {
+                Log.w(TAG, "ResourcesManager is null");
+                return;
+            }
+            
+            // ===== Tinker 步骤 2: 获取所有 Resources 引用 =====
+            Collection<WeakReference<Resources>> references = null;
+            Field resourceRefsField = null;
+            try {
+                resourceRefsField = resourcesManagerClass.getDeclaredField("mResourceReferences");
+                resourceRefsField.setAccessible(true);
+                references = (Collection<WeakReference<Resources>>) resourceRefsField.get(resourcesManager);
+            } catch (NoSuchFieldException e) {
+                Log.d(TAG, "mResourceReferences field not found");
+            }
+            
+            // ===== Tinker 步骤 3: 清空 ResourcesManager 缓存 =====
+            clearResourcesManagerCache(resourcesManager);
+            
+            // ===== Tinker 步骤 4: 替换所有 ResourcesImpl 中的 AssetManager =====
+            Field resourceImplsField = null;
+            try {
+                resourceImplsField = resourcesManagerClass.getDeclaredField("mResourceImpls");
+                resourceImplsField.setAccessible(true);
+                Object resourceImpls = resourceImplsField.get(resourcesManager);
+                
+                if (resourceImpls instanceof ArrayMap) {
+                    ArrayMap<?, ?> map = (ArrayMap<?, ?>) resourceImpls;
+                    Log.d(TAG, "Found " + map.size() + " ResourceImpls in cache");
+                    
+                    for (int i = 0; i < map.size(); i++) {
+                        Object value = map.valueAt(i);
+                        if (value instanceof WeakReference) {
+                            Object resourcesImpl = ((WeakReference<?>) value).get();
+                            if (resourcesImpl != null) {
+                                replaceResourcesImplAssetsDirect(resourcesImpl, newAssetManager);
+                                Log.d(TAG, "Replaced AssetManager in ResourcesImpl[" + i + "]");
+                            }
+                        }
+                    }
+                }
+            } catch (NoSuchFieldException e) {
+                Log.w(TAG, "Cannot find mResourceImpls field");
+            }
+            
+            // ===== Tinker 步骤 5: 替换所有 Resources 中的 AssetManager 并调用 updateConfiguration =====
+            if (references != null) {
+                for (WeakReference<Resources> wr : references) {
+                    Resources resources = wr.get();
+                    if (resources == null) {
+                        continue;
+                    }
+                    
+                    try {
+                        // 替换 AssetManager
+                        replaceResourcesImplAssets2(resources, newAssetManager);
+                        
+                        // 清除 TypedArray 缓存（Tinker 的做法）
+                        clearPreloadTypedArrayIssue(resources);
+                        
+                        // 调用 updateConfiguration 强制刷新
+                        resources.updateConfiguration(
+                            resources.getConfiguration(),
+                            resources.getDisplayMetrics()
+                        );
+                        Log.d(TAG, "Updated Resources configuration");
+                    } catch (Exception e) {
+                        Log.w(TAG, "Failed to update Resources: " + e.getMessage());
+                    }
+                }
+            }
+            
+            // ===== Tinker 步骤 6: 修改 ApplicationInfo.publicSourceDir (Android N+) =====
+            try {
+                Field publicSourceDirField = context.getApplicationInfo().getClass().getDeclaredField("publicSourceDir");
+                publicSourceDirField.setAccessible(true);
+                publicSourceDirField.set(context.getApplicationInfo(), patchResourcePath);
+                Log.d(TAG, "Updated ApplicationInfo.publicSourceDir");
+            } catch (Exception e) {
+                Log.w(TAG, "Failed to update publicSourceDir: " + e.getMessage());
+            }
+            
+            // ===== 调试信息：打印 AssetManager 路径 =====
+            printAssetManagerPaths(newAssetManager);
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to replace all resources: " + e.getMessage());
+            throw e;
+        }
+    }
+    
+    /**
+     * 修改 LoadedApk 的 mResDir（Tinker 的关键步骤）
+     */
+    private static void replaceLoadedApkResDir(Context context, String patchResourcePath) {
+        try {
+            // 获取 ActivityThread
+            Class<?> activityThreadClass = Class.forName("android.app.ActivityThread");
+            Method currentActivityThreadMethod = activityThreadClass.getDeclaredMethod("currentActivityThread");
+            currentActivityThreadMethod.setAccessible(true);
+            Object currentActivityThread = currentActivityThreadMethod.invoke(null);
+            
+            // 获取 mPackages
+            Field packagesField = activityThreadClass.getDeclaredField("mPackages");
+            packagesField.setAccessible(true);
+            Map<String, WeakReference<?>> packages = (Map<String, WeakReference<?>>) packagesField.get(currentActivityThread);
+            
+            // 获取 LoadedApk 类
+            Class<?> loadedApkClass;
+            try {
+                loadedApkClass = Class.forName("android.app.LoadedApk");
+            } catch (ClassNotFoundException e) {
+                loadedApkClass = Class.forName("android.app.ActivityThread$PackageInfo");
+            }
+            
+            // 获取 mResDir 字段
+            Field resDirField = loadedApkClass.getDeclaredField("mResDir");
+            resDirField.setAccessible(true);
+            
+            // 替换所有 LoadedApk 的 mResDir
+            String appSourceDir = context.getApplicationInfo().sourceDir;
+            for (Map.Entry<String, WeakReference<?>> entry : packages.entrySet()) {
+                Object loadedApk = entry.getValue().get();
+                if (loadedApk == null) {
+                    continue;
+                }
+                String resDirPath = (String) resDirField.get(loadedApk);
+                if (appSourceDir.equals(resDirPath)) {
+                    resDirField.set(loadedApk, patchResourcePath);
+                    Log.d(TAG, "Updated LoadedApk.mResDir to: " + patchResourcePath);
+                }
+            }
+            
+            // 也尝试 mResourcePackages
+            try {
+                Field resourcePackagesField = activityThreadClass.getDeclaredField("mResourcePackages");
+                resourcePackagesField.setAccessible(true);
+                Map<String, WeakReference<?>> resourcePackages = (Map<String, WeakReference<?>>) resourcePackagesField.get(currentActivityThread);
+                
+                for (Map.Entry<String, WeakReference<?>> entry : resourcePackages.entrySet()) {
+                    Object loadedApk = entry.getValue().get();
+                    if (loadedApk == null) {
+                        continue;
+                    }
+                    String resDirPath = (String) resDirField.get(loadedApk);
+                    if (appSourceDir.equals(resDirPath)) {
+                        resDirField.set(loadedApk, patchResourcePath);
+                        Log.d(TAG, "Updated LoadedApk.mResDir in mResourcePackages");
+                    }
+                }
+            } catch (NoSuchFieldException e) {
+                Log.d(TAG, "mResourcePackages field not found");
+            }
+            
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to replace LoadedApk mResDir: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 清除 TypedArray 缓存（Tinker 的做法，解决 MIUI 等定制 ROM 的问题）
+     */
+    private static void clearPreloadTypedArrayIssue(Resources resources) {
+        try {
+            Field typedArrayPoolField = Resources.class.getDeclaredField("mTypedArrayPool");
+            typedArrayPoolField.setAccessible(true);
+            Object typedArrayPool = typedArrayPoolField.get(resources);
+            
+            Method acquireMethod = typedArrayPool.getClass().getDeclaredMethod("acquire");
+            acquireMethod.setAccessible(true);
+            
+            while (true) {
+                Object typedArray = acquireMethod.invoke(typedArrayPool);
+                if (typedArray == null) {
+                    break;
+                }
+            }
+            Log.d(TAG, "Cleared TypedArray cache");
+        } catch (Exception e) {
+            Log.d(TAG, "clearPreloadTypedArrayIssue: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 清空 ResourcesManager 缓存
+     * 这是解决资源热更新不生效的关键！
+     */
+    @SuppressWarnings("unchecked")
+    private static void clearResourcesManagerCache(Object resourcesManager) {
+        try {
+            // 尝试清空 mResourceImpls
+            try {
+                Field resourceImplsField = resourcesManager.getClass().getDeclaredField("mResourceImpls");
+                resourceImplsField.setAccessible(true);
+                Object resourceImpls = resourceImplsField.get(resourcesManager);
+                
+                if (resourceImpls instanceof ArrayMap) {
+                    ArrayMap<?, ?> map = (ArrayMap<?, ?>) resourceImpls;
+                    int size = map.size();
+                    map.clear();
+                    Log.d(TAG, "Cleared " + size + " entries from mResourceImpls cache");
+                }
+            } catch (NoSuchFieldException e) {
+                Log.d(TAG, "mResourceImpls field not found, trying alternatives");
+            }
+            
+            // 尝试清空 mActivityResourceReferences (Android 10+)
+            try {
+                Field activityRefsField = resourcesManager.getClass().getDeclaredField("mActivityResourceReferences");
+                activityRefsField.setAccessible(true);
+                Object activityRefs = activityRefsField.get(resourcesManager);
+                
+                if (activityRefs instanceof ArrayMap) {
+                    ArrayMap<?, ?> map = (ArrayMap<?, ?>) activityRefs;
+                    int size = map.size();
+                    map.clear();
+                    Log.d(TAG, "Cleared " + size + " entries from mActivityResourceReferences cache");
+                }
+            } catch (NoSuchFieldException e) {
+                Log.d(TAG, "mActivityResourceReferences field not found");
+            }
+            
+            // 尝试清空 mResourceReferences
+            try {
+                Field resourceRefsField = resourcesManager.getClass().getDeclaredField("mResourceReferences");
+                resourceRefsField.setAccessible(true);
+                Object resourceRefs = resourceRefsField.get(resourcesManager);
+                
+                if (resourceRefs instanceof Collection) {
+                    Collection<?> collection = (Collection<?>) resourceRefs;
+                    int size = collection.size();
+                    collection.clear();
+                    Log.d(TAG, "Cleared " + size + " entries from mResourceReferences cache");
+                }
+            } catch (NoSuchFieldException e) {
+                Log.d(TAG, "mResourceReferences field not found");
+            }
+            
+            Log.i(TAG, "ResourcesManager cache cleared successfully");
+            
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to clear ResourcesManager cache: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 打印 AssetManager 的路径信息（调试用）
+     */
+    private static void printAssetManagerPaths(AssetManager assetManager) {
+        try {
+            // Android 9.0+ 使用 getApkPaths
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                try {
+                    Method getApkPathsMethod = AssetManager.class.getDeclaredMethod("getApkPaths");
+                    getApkPathsMethod.setAccessible(true);
+                    String[] paths = (String[]) getApkPathsMethod.invoke(assetManager);
+                    
+                    if (paths != null && paths.length > 0) {
+                        Log.d(TAG, "=== AssetManager Paths ===");
+                        for (int i = 0; i < paths.length; i++) {
+                            Log.d(TAG, "  [" + i + "] " + paths[i]);
+                        }
+                        Log.d(TAG, "==========================");
+                    }
+                } catch (NoSuchMethodException e) {
+                    Log.d(TAG, "getApkPaths method not available");
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to print AssetManager paths: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * 替换 Resources 中 ResourcesImpl 的 AssetManager (Android 7.0+)
+     * 兼容 MIUI 等定制 ROM
+     */
+    private static void replaceResourcesImplAssets2(Resources resources, AssetManager newAssetManager) 
+            throws Exception {
+        try {
+            // 获取 Resources 中的 mResourcesImpl
+            Field resourcesImplField = Resources.class.getDeclaredField("mResourcesImpl");
+            resourcesImplField.setAccessible(true);
+            Object resourcesImpl = resourcesImplField.get(resources);
+            
+            if (resourcesImpl != null) {
+                // 在 ResourcesImpl 及其父类中查找 mAssets 字段
+                Class<?> clazz = resourcesImpl.getClass();
+                while (clazz != null) {
+                    try {
+                        Field assetsField = clazz.getDeclaredField("mAssets");
+                        assetsField.setAccessible(true);
+                        assetsField.set(resourcesImpl, newAssetManager);
+                        Log.d(TAG, "Replaced mAssets in " + clazz.getName());
+                        return;
+                    } catch (NoSuchFieldException e) {
+                        clazz = clazz.getSuperclass();
+                    }
+                }
+                Log.w(TAG, "mAssets not found in ResourcesImpl: " + resourcesImpl.getClass().getName());
+            }
+        } catch (NoSuchFieldException e) {
+            Log.w(TAG, "mResourcesImpl field not found: " + e.getMessage());
+        }
     }
 
     
@@ -450,58 +807,28 @@ public class ResourcePatcher {
     
     /**
      * 直接替换 ResourcesImpl 中的 mAssets 字段
+     * 兼容 MIUI 等定制 ROM
      */
     private static void replaceResourcesImplAssetsDirect(Object resourcesImpl, 
             AssetManager newAssetManager) throws Exception {
-        Field assetsField = resourcesImpl.getClass().getDeclaredField(FIELD_M_ASSETS);
-        assetsField.setAccessible(true);
-        assetsField.set(resourcesImpl, newAssetManager);
+        // 尝试在当前类和父类中查找 mAssets 字段
+        Class<?> clazz = resourcesImpl.getClass();
+        while (clazz != null) {
+            try {
+                Field assetsField = clazz.getDeclaredField(FIELD_M_ASSETS);
+                assetsField.setAccessible(true);
+                assetsField.set(resourcesImpl, newAssetManager);
+                Log.d(TAG, "Replaced mAssets in " + clazz.getName());
+                return;
+            } catch (NoSuchFieldException e) {
+                // 继续查找父类
+                clazz = clazz.getSuperclass();
+            }
+        }
+        Log.w(TAG, "mAssets field not found in ResourcesImpl hierarchy: " + resourcesImpl.getClass().getName());
     }
 
-    
-    /**
-     * 清理 ResourcesManager 缓存并替换 AssetManager (Android 9.0+)
-     */
-    @SuppressWarnings("unchecked")
-    private static void clearResourcesManagerCache(Context context, AssetManager newAssetManager) 
-            throws Exception {
-        try {
-            // 获取 ResourcesManager 单例
-            Class<?> resourcesManagerClass = Class.forName("android.app.ResourcesManager");
-            Method getInstanceMethod = resourcesManagerClass.getDeclaredMethod("getInstance");
-            getInstanceMethod.setAccessible(true);
-            Object resourcesManager = getInstanceMethod.invoke(null);
-            
-            if (resourcesManager == null) {
-                return;
-            }
-            
-            // 替换所有 ResourcesImpl 中的 AssetManager
-            replaceResourceImpls(resourcesManager, newAssetManager);
-            
-            // 替换 Application 的 Resources
-            Context appContext = context.getApplicationContext();
-            if (appContext instanceof Application) {
-                replaceResourcesImplAssets(appContext, newAssetManager);
-            }
-            
-            // 如果是 Activity，也替换
-            if (context instanceof Activity) {
-                replaceResourcesImplAssets(context, newAssetManager);
-            }
-            
-        } catch (Exception e) {
-            Log.w(TAG, "Failed to clear ResourcesManager cache: " + e.getMessage());
-            // 回退到标准方法
-            Resources originalResources = context.getResources();
-            Resources newResources = new Resources(
-                    newAssetManager,
-                    originalResources.getDisplayMetrics(),
-                    originalResources.getConfiguration()
-            );
-            replaceApplicationResources(context, newAssetManager, newResources);
-        }
-    }
+
     
     // ==================== 版本兼容性检查 ====================
     

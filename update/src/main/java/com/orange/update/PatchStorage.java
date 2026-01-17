@@ -2,6 +2,7 @@ package com.orange.update;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Build;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -261,6 +262,7 @@ public class PatchStorage {
     
     /**
      * 保存补丁文件（加密存储）
+     * 注意：加密功能需要 API 23+ (Android 6.0+)，低版本将直接存储未加密数据
      * @param patchId 补丁ID
      * @param patchData 补丁数据（原始未加密）
      * @return 保存是否成功
@@ -276,12 +278,19 @@ public class PatchStorage {
         File patchFile = getPatchFile(patchId);
         
         try {
-            // 加密数据
-            byte[] encryptedData = securityManager.encrypt(patchData);
+            // 加密数据 (API 23+) 或直接存储 (API 21-22)
+            byte[] dataToWrite;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                dataToWrite = securityManager.encrypt(patchData);
+            } else {
+                // API 21-22 不支持 KeyStore 加密，直接存储
+                Log.w(TAG, "API level < 23, storing patch without encryption");
+                dataToWrite = patchData;
+            }
             
             // 写入文件
             try (FileOutputStream fos = new FileOutputStream(patchFile)) {
-                fos.write(encryptedData);
+                fos.write(dataToWrite);
                 fos.flush();
             }
             
@@ -303,6 +312,7 @@ public class PatchStorage {
     
     /**
      * 读取补丁文件（解密后返回）
+     * 注意：解密功能需要 API 23+ (Android 6.0+)，低版本将直接读取未加密数据
      * @param patchId 补丁ID
      * @return 解密后的补丁数据，如果读取失败返回 null
      */
@@ -319,11 +329,17 @@ public class PatchStorage {
         }
         
         try {
-            // 读取加密数据
-            byte[] encryptedData = readFileBytes(patchFile);
+            // 读取数据
+            byte[] fileData = readFileBytes(patchFile);
             
-            // 解密数据
-            return securityManager.decrypt(encryptedData);
+            // 解密数据 (API 23+) 或直接返回 (API 21-22)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                return securityManager.decrypt(fileData);
+            } else {
+                // API 21-22 不支持 KeyStore 加密，直接返回
+                Log.w(TAG, "API level < 23, reading patch without decryption");
+                return fileData;
+            }
             
         } catch (IOException | SecurityException e) {
             Log.e(TAG, "Failed to read patch file: " + patchId, e);
@@ -333,6 +349,7 @@ public class PatchStorage {
     
     /**
      * 从原始文件保存补丁（加密存储）
+     * 注意：加密功能需要 API 23+ (Android 6.0+)，低版本将直接存储未加密数据
      * @param patchId 补丁ID
      * @param sourceFile 原始补丁文件
      * @return 保存是否成功
@@ -346,19 +363,30 @@ public class PatchStorage {
         }
         
         try {
-            // 使用 SecurityManager 加密文件
-            File encryptedFile = securityManager.encryptPatch(sourceFile);
-            
-            // 移动到补丁目录
             File targetFile = getPatchFile(patchId);
-            if (targetFile.exists()) {
-                targetFile.delete();
-            }
             
-            if (!encryptedFile.renameTo(targetFile)) {
-                // 如果重命名失败，尝试复制
-                copyFile(encryptedFile, targetFile);
-                encryptedFile.delete();
+            // 加密文件 (API 23+) 或直接复制 (API 21-22)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                // 使用 SecurityManager 加密文件
+                File encryptedFile = securityManager.encryptPatch(sourceFile);
+                
+                // 移动到补丁目录
+                if (targetFile.exists()) {
+                    targetFile.delete();
+                }
+                
+                if (!encryptedFile.renameTo(targetFile)) {
+                    // 如果重命名失败，尝试复制
+                    copyFile(encryptedFile, targetFile);
+                    encryptedFile.delete();
+                }
+            } else {
+                // API 21-22 不支持 KeyStore 加密，直接复制
+                Log.w(TAG, "API level < 23, storing patch without encryption");
+                if (targetFile.exists()) {
+                    targetFile.delete();
+                }
+                copyFile(sourceFile, targetFile);
             }
             
             // 添加到已下载列表
@@ -375,6 +403,7 @@ public class PatchStorage {
     
     /**
      * 解密补丁到应用目录
+     * 注意：解密功能需要 API 23+ (Android 6.0+)，低版本将直接复制未加密数据
      * @param patchId 补丁ID
      * @return 解密后的补丁文件，如果失败返回 null
      */
@@ -383,33 +412,40 @@ public class PatchStorage {
             throw new IllegalArgumentException("Patch ID cannot be null or empty");
         }
         
-        File encryptedFile = getPatchFile(patchId);
-        if (!encryptedFile.exists()) {
-            Log.w(TAG, "Encrypted patch file not found: " + patchId);
+        File patchFile = getPatchFile(patchId);
+        if (!patchFile.exists()) {
+            Log.w(TAG, "Patch file not found: " + patchId);
             return null;
         }
         
         try {
-            // 解密到临时文件
-            File decryptedFile = securityManager.decryptPatch(encryptedFile);
-            
-            // 移动到应用目录
             File appliedFile = getAppliedPatchFile();
             if (appliedFile.exists()) {
                 appliedFile.delete();
             }
             
-            if (!decryptedFile.renameTo(appliedFile)) {
-                // 如果重命名失败，尝试复制
-                copyFile(decryptedFile, appliedFile);
-                securityManager.secureDelete(decryptedFile);
+            // 解密 (API 23+) 或直接复制 (API 21-22)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                // 解密到临时文件
+                File decryptedFile = securityManager.decryptPatch(patchFile);
+                
+                // 移动到应用目录
+                if (!decryptedFile.renameTo(appliedFile)) {
+                    // 如果重命名失败，尝试复制
+                    copyFile(decryptedFile, appliedFile);
+                    securityManager.secureDelete(decryptedFile);
+                }
+            } else {
+                // API 21-22 不支持 KeyStore 加密，直接复制
+                Log.w(TAG, "API level < 23, copying patch without decryption");
+                copyFile(patchFile, appliedFile);
             }
             
-            Log.d(TAG, "Decrypted patch to applied directory: " + patchId);
+            Log.d(TAG, "Prepared patch to applied directory: " + patchId);
             return appliedFile;
             
         } catch (IOException | SecurityException e) {
-            Log.e(TAG, "Failed to decrypt patch: " + patchId, e);
+            Log.e(TAG, "Failed to prepare patch: " + patchId, e);
             return null;
         }
     }

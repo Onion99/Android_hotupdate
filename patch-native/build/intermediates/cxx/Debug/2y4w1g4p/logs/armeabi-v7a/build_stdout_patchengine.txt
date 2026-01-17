@@ -1,0 +1,2 @@
+ninja: Entering directory `D:\android\projecet_iade\androidhotupdate\patch-native\.cxx\Debug\2y4w1g4p\armeabi-v7a'
+ninja: no work to do.

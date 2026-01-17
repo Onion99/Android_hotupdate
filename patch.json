@@ -1,0 +1,33 @@
+{
+  "patchId": "patch_1768588193317_bb6aff07",
+  "patchVersion": "1.2",
+  "baseVersion": "1.0",
+  "baseVersionCode": 1,
+  "targetVersion": "1.2",
+  "targetVersionCode": 3,
+  "patchMode": "full_dex",
+  "md5": "00000000000000000000000000000000",
+  "createTime": 1768588193349,
+  "fileSize": 0,
+  "changes": {
+    "dex": {
+      "modified": [
+        "com.orange.update.MainActivity"
+      ],
+      "added": [],
+      "deleted": []
+    },
+    "resources": {
+      "modified": [
+        "res/layout/activity_main.xml"
+      ],
+      "added": [],
+      "deleted": []
+    },
+    "assets": {
+      "modified": [],
+      "added": [],
+      "deleted": []
+    }
+  }
+}

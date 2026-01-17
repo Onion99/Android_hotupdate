@@ -4,6 +4,7 @@ import android.content.Context;
 import android.util.Log;
 
 import java.io.File;
+import java.util.Locale;
 
 /**
  * 补丁应用器，负责将补丁应用到应用程序。
@@ -158,7 +159,7 @@ public class PatchApplier {
      */
     private boolean hasResourcePatch(File patchFile) {
         // 检查文件扩展名或内容
-        String fileName = patchFile.getName().toLowerCase();
+        String fileName = patchFile.getName().toLowerCase(Locale.ROOT);
         
         // 如果是 APK 或 ZIP 文件，可能包含资源
         if (fileName.endsWith(".apk") || fileName.endsWith(".zip")) {

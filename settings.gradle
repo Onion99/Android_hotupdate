@@ -22,3 +22,8 @@ dependencyResolutionManagement {
 rootProject.name = "安卓热更新"
 include ':app'
 include ':update'
+include ':patch-core'
+include ':patch-native'
+include ':patch-gradle-plugin'
+include ':patch-cli'
+include ':patch-generator-android'

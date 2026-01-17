@@ -2,6 +2,7 @@ package com.orange.update;
 
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.Locale;
 
 /**
  * SDK 配置类，使用 Builder 模式构建。
@@ -164,7 +165,7 @@ public class UpdateConfig {
             
             try {
                 URL parsedUrl = new URL(url);
-                String protocol = parsedUrl.getProtocol().toLowerCase();
+                String protocol = parsedUrl.getProtocol().toLowerCase(Locale.ROOT);
                 if (!protocol.equals("http") && !protocol.equals("https")) {
                     throw new IllegalArgumentException(
                         "URL must use HTTP or HTTPS protocol, got: " + protocol);

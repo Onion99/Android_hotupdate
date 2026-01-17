@@ -1,0 +1,34 @@
+plugins {
+    id 'java-library'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+dependencies {
+    // ZIP handling
+    implementation 'net.lingala.zip4j:zip4j:2.11.5'
+    
+    // File utilities
+    implementation 'commons-io:commons-io:2.15.1'
+    
+    // JSON serialization
+    implementation 'com.google.code.gson:gson:2.10.1'
+    
+    // Dex parsing (dexlib2)
+    implementation 'org.smali:dexlib2:2.5.2'
+    
+    // APK parsing (for reliable manifest parsing)
+    implementation 'net.dongliu:apk-parser:2.6.10'
+    
+    // Testing
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'net.jqwik:jqwik:1.8.2'
+    testImplementation 'org.assertj:assertj-core:3.24.2'
+}
+
+test {
+    useJUnitPlatform()
+}

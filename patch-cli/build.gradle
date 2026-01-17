@@ -1,0 +1,71 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+application {
+    mainClass = 'com.orange.patchgen.cli.PatchGeneratorCli'
+}
+
+dependencies {
+    // Core patch generator library
+    implementation project(':patch-core')
+    
+    // Command line parsing
+    implementation 'commons-cli:commons-cli:1.6.0'
+    
+    // Testing
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.assertj:assertj-core:3.24.2'
+}
+
+// Configure executable JAR with all dependencies
+jar {
+    manifest {
+        attributes(
+            'Main-Class': 'com.orange.patchgen.cli.PatchGeneratorCli',
+            'Implementation-Title': 'Patch Generator CLI',
+            'Implementation-Version': project.version ?: '1.0.0'
+        )
+    }
+}
+
+// Create fat JAR with all dependencies
+tasks.register('fatJar', Jar) {
+    archiveClassifier = 'all'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    
+    manifest {
+        attributes(
+            'Main-Class': 'com.orange.patchgen.cli.PatchGeneratorCli',
+            'Implementation-Title': 'Patch Generator CLI',
+            'Implementation-Version': project.version ?: '1.0.0'
+        )
+    }
+    
+    from sourceSets.main.output
+    
+    dependsOn configurations.runtimeClasspath
+    from {
+        configurations.runtimeClasspath.findAll { it.name.endsWith('jar') }.collect { zipTree(it) }
+    }
+}
+
+// Build fat JAR when running 'build' task
+build.dependsOn fatJar
+
+test {
+    // Use JUnit 4 for tests
+    useJUnit()
+    
+    // Show test output
+    testLogging {
+        events "passed", "skipped", "failed"
+        showStandardStreams = true
+    }
+}

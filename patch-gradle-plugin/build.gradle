@@ -1,0 +1,53 @@
+plugins {
+    id 'java-gradle-plugin'
+    id 'maven-publish'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+dependencies {
+    // Gradle API
+    implementation gradleApi()
+    
+    // Patch core library
+    implementation project(':patch-core')
+    
+    // Testing
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation gradleTestKit()
+}
+
+gradlePlugin {
+    plugins {
+        patchPlugin {
+            id = 'com.orange.patch'
+            implementationClass = 'com.orange.patch.plugin.PatchPlugin'
+            displayName = 'Patch Generator Plugin'
+            description = 'Gradle plugin for generating hot update patches for Android applications'
+        }
+    }
+}
+
+// Publishing configuration
+publishing {
+    publications {
+        pluginMaven(MavenPublication) {
+            groupId = 'com.orange.patch'
+            artifactId = 'patch-gradle-plugin'
+            version = '1.0.0'
+        }
+    }
+    repositories {
+        maven {
+            name = 'local'
+            url = layout.buildDirectory.dir('repo')
+        }
+    }
+}
+
+test {
+    useJUnit()
+}

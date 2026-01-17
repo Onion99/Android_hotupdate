@@ -7,6 +7,8 @@ import android.security.keystore.KeyProperties;
 import android.util.Base64;
 import android.util.Log;
 
+import androidx.annotation.RequiresApi;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -172,9 +174,11 @@ public class SecurityManager {
     /**
      * 获取或创建 AES 加密密钥
      * 密钥存储在 Android KeyStore 中，受硬件安全模块保护
+     * 注意：此方法需要 API 23+ (Android 6.0+)
      * @return AES 密钥
      * @throws SecurityException 如果密钥生成或获取失败
      */
+    @RequiresApi(api = Build.VERSION_CODES.M)
     public SecretKey getOrCreateEncryptionKey() {
         try {
             // 检查密钥是否已存在
@@ -194,6 +198,7 @@ public class SecurityManager {
      * 生成新的 AES-256 加密密钥并存储到 KeyStore
      * @return 生成的密钥
      */
+    @RequiresApi(api = Build.VERSION_CODES.M)
     private SecretKey generateEncryptionKey() {
         try {
             KeyGenerator keyGenerator = KeyGenerator.getInstance(
@@ -262,6 +267,7 @@ public class SecurityManager {
      * @return 加密后的文件（.enc 扩展名）
      * @throws SecurityException 如果加密失败
      */
+    @RequiresApi(api = Build.VERSION_CODES.M)
     public File encryptPatch(File patchFile) {
         if (patchFile == null || !patchFile.exists()) {
             throw new IllegalArgumentException("Patch file does not exist");
@@ -315,6 +321,7 @@ public class SecurityManager {
      * @return 加密后的数据（包含 IV）
      * @throws SecurityException 如果加密失败
      */
+    @RequiresApi(api = Build.VERSION_CODES.M)
     public byte[] encrypt(byte[] data) {
         if (data == null) {
             throw new IllegalArgumentException("Data cannot be null");
@@ -360,6 +367,7 @@ public class SecurityManager {
      * @return 解密后的文件
      * @throws SecurityException 如果解密失败
      */
+    @RequiresApi(api = Build.VERSION_CODES.M)
     public File decryptPatch(File encryptedFile) {
         if (encryptedFile == null || !encryptedFile.exists()) {
             throw new IllegalArgumentException("Encrypted file does not exist");
@@ -426,6 +434,7 @@ public class SecurityManager {
      * @return 解密后的数据
      * @throws SecurityException 如果解密失败
      */
+    @RequiresApi(api = Build.VERSION_CODES.M)
     public byte[] decrypt(byte[] encryptedData) {
         if (encryptedData == null) {
             throw new IllegalArgumentException("Encrypted data cannot be null");

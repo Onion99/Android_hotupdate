@@ -4,12 +4,12 @@ plugins {
 
 android {
     namespace 'com.orange.update'
-    compileSdk 36
+    compileSdk 34
 
     defaultConfig {
         applicationId "com.orange.update"
         minSdk 24
-        targetSdk 36
+        targetSdk 34
         versionCode 1
         versionName "1.0"
 
@@ -29,6 +29,11 @@ android {
 }
 
 dependencies {
+    // 热更新补丁生成 SDK
+    implementation project(':patch-generator-android')
+    
+    // 热更新应用 SDK
+    implementation project(':update')
 
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.10.0'

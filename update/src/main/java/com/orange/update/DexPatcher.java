@@ -4,6 +4,8 @@ import android.content.Context;
 import android.os.Build;
 import android.util.Log;
 
+import androidx.annotation.ChecksSdkIntAtLeast;
+
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Array;
@@ -351,6 +353,7 @@ public class DexPatcher {
      * 
      * @return 是否需要特殊处理
      */
+    @ChecksSdkIntAtLeast(api = Build.VERSION_CODES.Q)
     public static boolean requiresSpecialHandling() {
         return Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q;
     }

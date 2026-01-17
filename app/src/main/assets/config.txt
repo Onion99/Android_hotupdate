@@ -1,0 +1,4 @@
+Version: 1.2
+Message: 🔥 This is the UPDATED config file from v1.2 with hot patch!
+Feature: Full hot update support (DEX + SO + Resources + Assets)
+Assets: Successfully patched via hot update!

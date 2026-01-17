@@ -1,0 +1,3 @@
+D:/android/projecet_iade/androidhotupdate/patch-native/.cxx/Debug/2y4w1g4p/armeabi-v7a/CMakeFiles/patchengine.dir
+D:/android/projecet_iade/androidhotupdate/patch-native/.cxx/Debug/2y4w1g4p/armeabi-v7a/CMakeFiles/edit_cache.dir
+D:/android/projecet_iade/androidhotupdate/patch-native/.cxx/Debug/2y4w1g4p/armeabi-v7a/CMakeFiles/rebuild_cache.dir

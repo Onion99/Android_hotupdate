@@ -106,7 +106,7 @@ public class PatchDownloader {
             } else if (responseCode == HttpURLConnection.HTTP_PARTIAL) {
                 // 服务器支持断点续传，继续下载
                 Log.d(TAG, "Server supports resume, continuing from: " + downloadedBytes);
-            } else if (responseCode == HttpURLConnection.HTTP_RANGE_NOT_SATISFIABLE) {
+            } else if (responseCode == 416) { // HTTP 416 Range Not Satisfiable
                 // 文件已完整下载
                 Log.d(TAG, "File already fully downloaded");
                 notifySuccess(callback, targetFile);
@@ -117,8 +117,8 @@ public class PatchDownloader {
                 return;
             }
             
-            // 获取文件总大小
-            long contentLength = connection.getContentLengthLong();
+            // 获取文件总大小 (使用 getContentLength() 兼容 API 21+)
+            long contentLength = connection.getContentLength();
             long totalSize = contentLength + downloadedBytes;
             
             if (contentLength <= 0 && downloadedBytes == 0) {

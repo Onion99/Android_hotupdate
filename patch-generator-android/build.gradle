@@ -1,0 +1,48 @@
+plugins {
+    id 'com.android.library'
+}
+
+android {
+    namespace 'com.orange.patchgen.android'
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 21
+        targetSdk 34
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        consumerProguardFiles "consumer-rules.pro"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+
+dependencies {
+    // Core patch generation library (use api to expose to consumers)
+    api project(':patch-core')
+    
+    // Native patch engine (includes SO libraries)
+    api project(':patch-native')
+    
+    // AndroidX annotations
+    implementation 'androidx.annotation:annotation:1.7.1'
+    
+    // Unit testing
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.assertj:assertj-core:3.24.2'
+    testImplementation 'org.mockito:mockito-core:5.8.0'
+    
+    // Android instrumented tests
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+}
