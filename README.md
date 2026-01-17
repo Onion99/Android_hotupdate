@@ -372,7 +372,65 @@ if (success) {
 }
 ```
 
-**9. 配置安全策略（Demo 应用功能）**
+**9. 使用 HotUpdateHelper 的安全策略（推荐）**
+
+`HotUpdateHelper` 提供了简单易用的安全策略 API，无需手动检查签名和加密：
+
+```java
+HotUpdateHelper helper = new HotUpdateHelper(context);
+
+// 配置安全策略
+helper.setRequireSignature(true);  // 强制要求补丁签名
+helper.setRequireEncryption(true); // 强制要求补丁加密
+
+// 应用补丁时会自动检查安全策略
+helper.applyPatch(patchFile, new HotUpdateHelper.Callback() {
+    @Override
+    public void onProgress(int percent, String message) {
+        Log.d(TAG, "进度: " + percent + "%");
+    }
+    
+    @Override
+    public void onSuccess(HotUpdateHelper.PatchResult result) {
+        Log.i(TAG, "补丁应用成功");
+    }
+    
+    @Override
+    public void onError(String message) {
+        // 如果补丁不符合安全策略，会收到错误回调
+        // 例如："当前安全策略要求补丁必须签名！此补丁未签名，拒绝应用。"
+        Log.e(TAG, "补丁应用失败: " + message);
+    }
+});
+
+// 查询当前安全策略
+boolean requireSignature = helper.isRequireSignature();
+boolean requireEncryption = helper.isRequireEncryption();
+```
+
+**安全策略说明：**
+
+- **签名检查**：检查补丁是否包含签名文件
+  - 支持 zip 内部签名（`signature.sig`）
+  - 支持外部签名文件（`.sig`）
+  - 如果启用 `setRequireSignature(true)`，未签名的补丁将被拒绝
+
+- **加密检查**：检查补丁文件名是否以 `.enc` 结尾
+  - 如果启用 `setRequireEncryption(true)`，未加密的补丁将被拒绝
+  - 加密补丁会自动解密（由 `PatchApplier` 处理）
+
+- **推荐配置**：
+  ```java
+  // 生产环境推荐配置
+  helper.setRequireSignature(true);  // 防止补丁被篡改
+  helper.setRequireEncryption(true); // 保护补丁内容
+  
+  // 开发/测试环境可以关闭
+  helper.setRequireSignature(false);
+  helper.setRequireEncryption(false);
+  ```
+
+**10. 配置安全策略（Demo 应用功能）**
 
 Demo 应用支持配置安全策略，强制要求补丁签名或加密：
 

@@ -469,15 +469,14 @@ if (intent != null) {
 可以配置安全策略，强制要求补丁签名或加密：
 
 ```java
+// 使用 HotUpdateHelper 的安全策略 API（推荐）
+HotUpdateHelper helper = new HotUpdateHelper(context);
+
 // 配置安全策略
-SharedPreferences securityPrefs = context.getSharedPreferences("security_policy", MODE_PRIVATE);
-securityPrefs.edit()
-    .putBoolean("require_signature", true)  // 强制要求签名
-    .putBoolean("require_encryption", true) // 强制要求加密
-    .apply();
+helper.setRequireSignature(true);  // 强制要求签名
+helper.setRequireEncryption(true); // 强制要求加密
 
 // 应用补丁时会自动检查安全策略
-HotUpdateHelper helper = new HotUpdateHelper(context);
 helper.applyPatch(patchFile, new HotUpdateHelper.Callback() {
     @Override
     public void onProgress(int percent, String message) {
@@ -492,15 +491,22 @@ helper.applyPatch(patchFile, new HotUpdateHelper.Callback() {
     @Override
     public void onError(String message) {
         // 如果补丁不符合安全策略，会返回错误
-        // 例如："当前安全策略要求补丁必须签名"
+        // 例如："当前安全策略要求补丁必须签名！此补丁未签名，拒绝应用。"
         Log.e(TAG, "应用失败: " + message);
     }
 });
+
+// 查询当前安全策略
+boolean requireSignature = helper.isRequireSignature();
+boolean requireEncryption = helper.isRequireEncryption();
+Log.d(TAG, "要求签名: " + requireSignature + ", 要求加密: " + requireEncryption);
 ```
 
 **安全策略说明：**
-- `require_signature`: 开启后只能应用已签名的补丁
-- `require_encryption`: 开启后只能应用已加密的补丁
+- `setRequireSignature(true)`: 开启后只能应用已签名的补丁
+  - 支持 zip 内部签名（`signature.sig`）
+  - 支持外部签名文件（`.sig`）
+- `setRequireEncryption(true)`: 开启后只能应用已加密的补丁（文件名以 `.enc` 结尾）
 - 如果补丁不符合策略要求，会拒绝应用并显示详细错误信息
 - 适合在生产环境中强制执行安全规范
 - Demo 应用提供了可视化的安全策略配置界面
