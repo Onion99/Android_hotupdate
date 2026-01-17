@@ -48,6 +48,11 @@ public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "PatchDemo";
     private static final int PERMISSION_REQUEST_CODE = 100;
+    
+    // 安全策略配置
+    private static final String PREFS_SECURITY = "security_policy";
+    private static final String KEY_REQUIRE_SIGNATURE = "require_signature";
+    private static final String KEY_REQUIRE_ENCRYPTION = "require_encryption";
 
     // UI 组件
     private TextView tvStatus;
@@ -70,6 +75,7 @@ public class MainActivity extends AppCompatActivity {
     private Button btnGenerateKeys;
     private Button btnLoadKeys;
     private Button btnConfigKeys;
+    private Button btnSecuritySettings;
     
     // RSA密钥对（用于演示）
     private java.security.KeyPair demoKeyPair;
@@ -151,6 +157,7 @@ public class MainActivity extends AppCompatActivity {
         btnGenerateKeys = findViewById(R.id.btn_generate_keys);
         btnLoadKeys = findViewById(R.id.btn_load_keys);
         btnConfigKeys = findViewById(R.id.btn_config_keys);
+        btnSecuritySettings = findViewById(R.id.btn_security_settings);
         Button btnTestAssets = findViewById(R.id.btn_test_assets);
 
         btnGenerate.setOnClickListener(v -> startPatchGeneration());
@@ -164,14 +171,15 @@ public class MainActivity extends AppCompatActivity {
         btnVerifySuccess.setOnClickListener(v -> testSignatureVerificationSuccess());
         btnVerifyFail.setOnClickListener(v -> testSignatureVerificationFail());
         btnGenerateKeys.setOnClickListener(v -> generateRSAKeyPair());
-        btnLoadKeys.setOnClickListener(v -> loadUserKeys());
+        btnLoadKeys.setOnClickListener(v -> loadUserKeys(true)); // 手动加载时显示提示
         btnConfigKeys.setOnClickListener(v -> showConfigKeysDialog());
+        btnSecuritySettings.setOnClickListener(v -> showSecuritySettingsDialog());
         btnTestAssets.setOnClickListener(v -> testAssetsFile());
         
         updateButtonStates();
         
-        // 应用启动时自动加载密钥
-        loadUserKeys();
+        // 移除自动加载密钥的逻辑，让用户手动点击加载
+        // loadUserKeys();
     }
 
     /**
@@ -277,6 +285,11 @@ public class MainActivity extends AppCompatActivity {
         Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
         if (type == 2) {
             intent.setType("application/zip");
+            
+            // 更新提示信息
+            Toast.makeText(this, 
+                "提示：新版本补丁的签名已嵌入在 zip 包内，无需单独管理签名文件", 
+                Toast.LENGTH_LONG).show();
         } else {
             intent.setType("application/vnd.android.package-archive");
         }
@@ -293,8 +306,24 @@ public class MainActivity extends AppCompatActivity {
 
     private void handleSelectedFile(Uri uri) {
         try {
-            String[] fileNames = {"selected_base.apk", "selected_new.apk", "selected_patch.zip"};
-            String fileName = fileNames[selectingFileType];
+            // 获取原始文件名
+            String originalFileName = getFileNameFromUri(uri);
+            
+            // 根据文件类型确定目标文件名
+            String fileName;
+            if (selectingFileType == 2) {
+                // 补丁文件：保留原始文件名（包括 .enc 扩展名）
+                if (originalFileName != null && !originalFileName.isEmpty()) {
+                    fileName = originalFileName;
+                } else {
+                    fileName = "selected_patch.zip";
+                }
+            } else {
+                // APK 文件：使用固定名称
+                String[] fileNames = {"selected_base.apk", "selected_new.apk", "selected_patch.zip"};
+                fileName = fileNames[selectingFileType];
+            }
+            
             File destFile = new File(getExternalFilesDir(null), fileName);
             
             InputStream inputStream = getContentResolver().openInputStream(uri);
@@ -319,7 +348,11 @@ public class MainActivity extends AppCompatActivity {
                         break;
                     case 2:
                         selectedPatchFile = destFile;
-                        btnSelectPatch.setText("补丁: " + formatSize(destFile.length()));
+                        String patchInfo = fileName.endsWith(".enc") ? "加密补丁: " : "补丁: ";
+                        btnSelectPatch.setText(patchInfo + formatSize(destFile.length()));
+                        
+                        // 尝试复制对应的签名文件
+                        copySignatureFileIfExists(uri, destFile);
                         break;
                 }
                 
@@ -330,6 +363,116 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             Log.e(TAG, "处理文件失败", e);
             Toast.makeText(this, "处理文件失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+    
+    /**
+     * 从 URI 获取文件名
+     */
+    private String getFileNameFromUri(Uri uri) {
+        String fileName = null;
+        
+        // 尝试从 URI 路径获取文件名
+        if (uri.getScheme() != null && uri.getScheme().equals("content")) {
+            android.database.Cursor cursor = getContentResolver().query(uri, null, null, null, null);
+            if (cursor != null) {
+                try {
+                    if (cursor.moveToFirst()) {
+                        int nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME);
+                        if (nameIndex >= 0) {
+                            fileName = cursor.getString(nameIndex);
+                        }
+                    }
+                } finally {
+                    cursor.close();
+                }
+            }
+        }
+        
+        // 如果从 content provider 获取失败，尝试从路径获取
+        if (fileName == null || fileName.isEmpty()) {
+            String path = uri.getPath();
+            if (path != null) {
+                int lastSlash = path.lastIndexOf('/');
+                if (lastSlash >= 0 && lastSlash < path.length() - 1) {
+                    fileName = path.substring(lastSlash + 1);
+                }
+            }
+        }
+        
+        return fileName;
+    }
+    
+    /**
+     * 尝试复制签名文件（如果存在）
+     * 当用户选择补丁文件时，自动查找并复制对应的 .sig 签名文件
+     */
+    private void copySignatureFileIfExists(Uri patchUri, File destPatchFile) {
+        try {
+            // 方法1: 尝试从原始文件路径获取签名文件
+            String originalFileName = getFileNameFromUri(patchUri);
+            if (originalFileName != null) {
+                // 在下载目录查找签名文件
+                File downloadDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+                File signatureFileInDownload = new File(downloadDir, originalFileName + ".sig");
+                
+                if (signatureFileInDownload.exists()) {
+                    // 找到签名文件，复制到应用目录
+                    File destSigFile = new File(destPatchFile.getPath() + ".sig");
+                    
+                    FileInputStream sigInputStream = new FileInputStream(signatureFileInDownload);
+                    FileOutputStream sigOutputStream = new FileOutputStream(destSigFile);
+                    
+                    byte[] buffer = new byte[8192];
+                    int bytesRead;
+                    while ((bytesRead = sigInputStream.read(buffer)) != -1) {
+                        sigOutputStream.write(buffer, 0, bytesRead);
+                    }
+                    
+                    sigOutputStream.close();
+                    sigInputStream.close();
+                    
+                    Log.i(TAG, "✓ 签名文件已复制: " + destSigFile.getName());
+                    Toast.makeText(this, "✓ 已自动复制签名文件", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+            }
+            
+            // 方法2: 尝试通过 URI 直接访问（可能不可靠）
+            String patchPath = patchUri.getPath();
+            if (patchPath != null) {
+                Uri signatureUri = Uri.parse(patchUri.toString() + ".sig");
+                
+                try {
+                    InputStream sigInputStream = getContentResolver().openInputStream(signatureUri);
+                    if (sigInputStream != null) {
+                        File destSigFile = new File(destPatchFile.getPath() + ".sig");
+                        FileOutputStream sigOutputStream = new FileOutputStream(destSigFile);
+                        
+                        byte[] buffer = new byte[8192];
+                        int bytesRead;
+                        while ((bytesRead = sigInputStream.read(buffer)) != -1) {
+                            sigOutputStream.write(buffer, 0, bytesRead);
+                        }
+                        
+                        sigOutputStream.close();
+                        sigInputStream.close();
+                        
+                        Log.i(TAG, "✓ 签名文件已复制（通过URI）: " + destSigFile.getName());
+                        Toast.makeText(this, "✓ 已自动复制签名文件", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                } catch (Exception e) {
+                    // URI 方法失败，继续
+                    Log.d(TAG, "通过 URI 访问签名文件失败: " + e.getMessage());
+                }
+            }
+            
+            // 未找到签名文件
+            Log.d(TAG, "未找到签名文件（这是正常的，如果补丁未签名）");
+            
+        } catch (Exception e) {
+            Log.e(TAG, "复制签名文件时出错", e);
         }
     }
 
@@ -652,16 +795,25 @@ public class MainActivity extends AppCompatActivity {
                         com.orange.update.SecurityManager securityManager = 
                             new com.orange.update.SecurityManager(this);
                         
-                        // 使用密码或默认密钥加密
-                        File encryptedFile = securityManager.encryptPatch(patchFile);
+                        File encryptedFile;
                         
-                        // 保存密码信息
+                        // 根据是否有密码选择加密方法
                         if (!password.isEmpty()) {
+                            // 使用密码加密
+                            Log.d(TAG, "使用自定义密码加密补丁");
+                            encryptedFile = securityManager.encryptPatchWithPassword(patchFile, password);
+                            
+                            // 保存密码提示信息
                             File passwordFile = new File(patchFile.getPath() + ".pwd");
                             FileOutputStream fos = new FileOutputStream(passwordFile);
                             fos.write(("密码提示: 使用自定义密码\n" + 
-                                      "注意: 客户端需要相同密码才能解密").getBytes("UTF-8"));
+                                      "注意: 客户端需要相同密码才能解密\n" +
+                                      "密码长度: " + password.length() + " 字符").getBytes("UTF-8"));
                             fos.close();
+                        } else {
+                            // 使用默认密钥加密
+                            Log.d(TAG, "使用默认密钥加密补丁");
+                            encryptedFile = securityManager.encryptPatch(patchFile);
                         }
                         
                         finalPatchFile = encryptedFile;
@@ -674,17 +826,16 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
                 
-                // 2. 签名补丁
+                // 2. 签名补丁（嵌入到 zip 内部）
                 if (withSignature && demoKeyPair != null) {
                     runOnUiThread(() -> tvStatus.setText("正在签名补丁..."));
                     
                     signature = signPatchFile(finalPatchFile, demoKeyPair.getPrivate());
                     
-                    // 保存签名到文件
-                    signatureFile = new File(finalPatchFile.getPath() + ".sig");
-                    FileOutputStream fos = new FileOutputStream(signatureFile);
-                    fos.write(signature.getBytes("UTF-8"));
-                    fos.close();
+                    // 将签名嵌入到 zip 包内部
+                    embedSignatureIntoZip(finalPatchFile, signature);
+                    
+                    Log.d(TAG, "✓ 签名已嵌入到补丁 zip 包内部");
                 }
                 
                 // 3. 显示结果
@@ -876,13 +1027,172 @@ public class MainActivity extends AppCompatActivity {
 
         Log.d(TAG, "应用补丁文件: " + patchToApply.getAbsolutePath());
         Log.d(TAG, "文件名: " + patchToApply.getName());
-        Log.d(TAG, "是否加密: " + patchToApply.getName().endsWith(".enc"));
+        
+        // 获取安全策略配置
+        android.content.SharedPreferences securityPrefs = getSharedPreferences(PREFS_SECURITY, MODE_PRIVATE);
+        boolean requireSignature = securityPrefs.getBoolean(KEY_REQUIRE_SIGNATURE, false);
+        boolean requireEncryption = securityPrefs.getBoolean(KEY_REQUIRE_ENCRYPTION, false);
+        
+        boolean isEncrypted = patchToApply.getName().endsWith(".enc");
+        
+        // 检查签名（优先检查 zip 内部）
+        boolean hasSignature = false;
+        String signatureSource = null;
+        
+        // 方法1: 检查 zip 内部是否有 signature.sig
+        try (net.lingala.zip4j.ZipFile zipFile = new net.lingala.zip4j.ZipFile(patchToApply)) {
+            if (zipFile.getFileHeader("signature.sig") != null) {
+                hasSignature = true;
+                signatureSource = "zip内部";
+                Log.d(TAG, "✓ 检测到 zip 内部的签名文件");
+            }
+        } catch (Exception e) {
+            Log.d(TAG, "检查 zip 内部签名失败: " + e.getMessage());
+        }
+        
+        // 方法2: 检查外部 .sig 文件（向后兼容）
+        File signatureFile = new File(patchToApply.getPath() + ".sig");
+        if (!hasSignature && signatureFile.exists()) {
+            hasSignature = true;
+            signatureSource = "外部文件";
+            Log.d(TAG, "✓ 检测到外部签名文件");
+        }
+        
+        Log.d(TAG, "安全策略 - 要求签名: " + requireSignature + ", 要求加密: " + requireEncryption);
+        Log.d(TAG, "补丁状态 - 已加密: " + isEncrypted + ", 有签名: " + hasSignature);
+        
+        // 检查安全策略
+        if (requireSignature && !hasSignature) {
+            new AlertDialog.Builder(this)
+                .setTitle("⚠️ 安全策略限制")
+                .setMessage("当前安全策略要求补丁必须签名！\n\n" +
+                           "此补丁未签名，拒绝应用。\n\n" +
+                           "补丁文件: " + patchToApply.getName() + "\n\n" +
+                           "解决方法：\n" +
+                           "1. 使用已签名的补丁（签名应嵌入在 zip 包内）\n" +
+                           "2. 或确保外部签名文件存在: " + patchToApply.getName() + ".sig\n" +
+                           "3. 或在设置中关闭签名验证要求")
+                .setPositiveButton("确定", null)
+                .setNeutralButton("安全设置", (d, w) -> showSecuritySettingsDialog())
+                .setIcon(android.R.drawable.ic_dialog_alert)
+                .show();
+            return;
+        }
+        
+        if (requireEncryption && !isEncrypted) {
+            new AlertDialog.Builder(this)
+                .setTitle("⚠️ 安全策略限制")
+                .setMessage("当前安全策略要求补丁必须加密！\n\n此补丁未加密，拒绝应用。\n\n请使用已加密的补丁，或在设置中关闭加密验证要求。")
+                .setPositiveButton("确定", null)
+                .setNeutralButton("安全设置", (d, w) -> showSecuritySettingsDialog())
+                .setIcon(android.R.drawable.ic_dialog_alert)
+                .show();
+            return;
+        }
 
+        // 检查是否有签名文件
+        if (hasSignature) {
+            Log.d(TAG, "检测到签名文件，需要验证签名");
+            // 有签名文件，需要先验证签名
+            verifyAndApplyPatch(patchToApply, signatureFile);
+        } else {
+            // 没有签名文件，直接处理
+            Log.d(TAG, "没有签名文件，跳过签名验证");
+            proceedWithPatch(patchToApply);
+        }
+    }
+    
+    /**
+     * 验证签名并应用补丁
+     */
+    private void verifyAndApplyPatch(File patchFile, File signatureFile) {
+        tvStatus.setText("正在验证补丁签名...");
+        progressBar.setProgress(0);
+        progressBar.setVisibility(View.VISIBLE);
+        setButtonsEnabled(false);
+        
+        new Thread(() -> {
+            try {
+                // 读取签名（优先从 zip 内部读取）
+                String signature = null;
+                
+                // 尝试从 zip 内部读取
+                try {
+                    signature = extractSignatureFromZip(patchFile);
+                    if (signature != null) {
+                        Log.d(TAG, "✓ 从 zip 内部读取签名");
+                    }
+                } catch (Exception e) {
+                    Log.d(TAG, "从 zip 内部读取签名失败: " + e.getMessage());
+                }
+                
+                // 如果 zip 内部没有，尝试从外部文件读取（向后兼容）
+                if (signature == null && signatureFile != null && signatureFile.exists()) {
+                    java.io.FileInputStream fis = new java.io.FileInputStream(signatureFile);
+                    byte[] sigBytes = new byte[(int) signatureFile.length()];
+                    fis.read(sigBytes);
+                    fis.close();
+                    signature = new String(sigBytes, "UTF-8");
+                    Log.d(TAG, "✓ 从外部文件读取签名");
+                }
+                
+                if (signature == null) {
+                    throw new Exception("未找到签名文件（既不在 zip 内部，也没有外部 .sig 文件）");
+                }
+                
+                // 验证签名
+                com.orange.update.SecurityManager securityManager = 
+                    new com.orange.update.SecurityManager(this);
+                
+                boolean isValid = securityManager.verifySignature(patchFile, signature);
+                
+                if (isValid) {
+                    Log.d(TAG, "✓ 签名验证成功");
+                    runOnUiThread(() -> {
+                        tvStatus.setText("✓ 签名验证成功");
+                        Toast.makeText(MainActivity.this, "✓ 签名验证通过", Toast.LENGTH_SHORT).show();
+                        // 继续处理补丁
+                        proceedWithPatch(patchFile);
+                    });
+                } else {
+                    Log.e(TAG, "✗ 签名验证失败");
+                    runOnUiThread(() -> {
+                        progressBar.setVisibility(View.GONE);
+                        setButtonsEnabled(true);
+                        tvStatus.setText("✗ 签名验证失败");
+                        
+                        new AlertDialog.Builder(MainActivity.this)
+                            .setTitle("⚠️ 签名验证失败")
+                            .setMessage("补丁签名验证失败！\n\n可能原因：\n• 补丁文件已被篡改\n• 签名文件不匹配\n• 使用了错误的密钥对\n\n为了安全，拒绝应用此补丁。")
+                            .setPositiveButton("确定", null)
+                            .setIcon(android.R.drawable.ic_dialog_alert)
+                            .show();
+                    });
+                }
+                
+            } catch (Exception e) {
+                Log.e(TAG, "签名验证异常", e);
+                runOnUiThread(() -> {
+                    progressBar.setVisibility(View.GONE);
+                    setButtonsEnabled(true);
+                    tvStatus.setText("✗ 签名验证异常: " + e.getMessage());
+                    Toast.makeText(MainActivity.this, 
+                        "签名验证异常: " + e.getMessage(), 
+                        Toast.LENGTH_LONG).show();
+                });
+            }
+        }).start();
+    }
+    
+    /**
+     * 继续处理补丁（签名验证通过后或无签名）
+     */
+    private void proceedWithPatch(File patchToApply) {
         // 检查是否是加密的补丁
         if (patchToApply.getName().endsWith(".enc")) {
-            // 加密的补丁，需要先解密
-            Log.d(TAG, "检测到加密补丁，开始解密流程");
-            decryptAndApplyPatch(patchToApply);
+            // 加密的补丁，显示密码输入对话框
+            Log.d(TAG, "检测到加密补丁，显示密码输入对话框");
+            showDecryptPasswordDialog(patchToApply);
         } else {
             // 未加密的补丁，直接应用
             Log.d(TAG, "未加密补丁，直接应用");
@@ -891,9 +1201,51 @@ public class MainActivity extends AppCompatActivity {
     }
     
     /**
+     * 显示解密密码输入对话框
+     */
+    private void showDecryptPasswordDialog(File encryptedPatch) {
+        // 创建对话框布局
+        android.widget.LinearLayout layout = new android.widget.LinearLayout(this);
+        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        layout.setPadding(50, 40, 50, 10);
+        
+        // 提示文本
+        TextView tvHint = new TextView(this);
+        tvHint.setText("此补丁已加密，请输入解密密码：");
+        tvHint.setTextSize(14);
+        tvHint.setPadding(0, 0, 0, 20);
+        layout.addView(tvHint);
+        
+        // 密码输入框
+        android.widget.EditText etPassword = new android.widget.EditText(this);
+        etPassword.setHint("输入密码（留空使用默认密钥）");
+        etPassword.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        layout.addView(etPassword);
+        
+        // 提示信息
+        TextView tvNote = new TextView(this);
+        tvNote.setText("\n💡 提示：\n• 如果生成时使用了自定义密码，请输入相同密码\n• 如果生成时未设置密码，留空即可");
+        tvNote.setTextSize(12);
+        tvNote.setTextColor(0xFF666666);
+        layout.addView(tvNote);
+        
+        // 创建对话框
+        new AlertDialog.Builder(this)
+            .setTitle("🔐 解密补丁")
+            .setView(layout)
+            .setPositiveButton("解密并应用", (d, w) -> {
+                String password = etPassword.getText().toString().trim();
+                decryptAndApplyPatch(encryptedPatch, password);
+            })
+            .setNegativeButton("取消", null)
+            .setCancelable(false)
+            .show();
+    }
+    
+    /**
      * 解密并应用补丁
      */
-    private void decryptAndApplyPatch(File encryptedPatch) {
+    private void decryptAndApplyPatch(File encryptedPatch, String password) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
             Toast.makeText(this, "解密需要 Android 6.0+", Toast.LENGTH_SHORT).show();
             return;
@@ -910,7 +1262,17 @@ public class MainActivity extends AppCompatActivity {
                 com.orange.update.SecurityManager securityManager = 
                     new com.orange.update.SecurityManager(this);
                 
-                File decryptedPatch = securityManager.decryptPatch(encryptedPatch);
+                File decryptedPatch;
+                
+                if (password != null && !password.isEmpty()) {
+                    // 使用密码解密
+                    Log.d(TAG, "使用自定义密码解密");
+                    decryptedPatch = securityManager.decryptPatchWithPassword(encryptedPatch, password);
+                } else {
+                    // 使用默认密钥解密
+                    Log.d(TAG, "使用默认密钥解密");
+                    decryptedPatch = securityManager.decryptPatch(encryptedPatch);
+                }
                 
                 runOnUiThread(() -> {
                     tvStatus.setText("✓ 解密成功，正在应用补丁...");
@@ -924,9 +1286,13 @@ public class MainActivity extends AppCompatActivity {
                     progressBar.setVisibility(View.GONE);
                     setButtonsEnabled(true);
                     tvStatus.setText("✗ 解密失败: " + e.getMessage());
-                    Toast.makeText(MainActivity.this, 
-                        "解密失败: " + e.getMessage() + "\n\n请确保使用相同的密钥", 
-                        Toast.LENGTH_LONG).show();
+                    
+                    String errorMsg = "解密失败: " + e.getMessage();
+                    if (e.getMessage() != null && e.getMessage().contains("Tag mismatch")) {
+                        errorMsg += "\n\n可能原因：\n• 密码错误\n• 文件已损坏\n• 使用了错误的密钥";
+                    }
+                    
+                    Toast.makeText(MainActivity.this, errorMsg, Toast.LENGTH_LONG).show();
                 });
             }
         }).start();
@@ -1184,6 +1550,14 @@ public class MainActivity extends AppCompatActivity {
      * 加载用户配置的密钥
      */
     private void loadUserKeys() {
+        loadUserKeys(false); // 默认静默加载
+    }
+    
+    /**
+     * 加载用户配置的密钥
+     * @param showToast 是否显示Toast提示
+     */
+    private void loadUserKeys(boolean showToast) {
         new Thread(() -> {
             try {
                 File publicKeyFile = new File(outputDir, "rsa_public_key.txt");
@@ -1212,23 +1586,31 @@ public class MainActivity extends AppCompatActivity {
                     demoKeyPair = new java.security.KeyPair(publicKey, privateKey);
                     
                     runOnUiThread(() -> {
-                        tvStatus.setText("✓ 已加载用户配置的密钥");
-                        showKeyPairInfo(publicKeyBase64, privateKeyBase64, publicKeyFile, privateKeyFile);
-                        Toast.makeText(MainActivity.this, 
-                            "✓ 已加载密钥文件", Toast.LENGTH_SHORT).show();
+                        Log.d(TAG, "✓ 已加载用户配置的密钥");
+                        if (showToast) {
+                            tvStatus.setText("✓ 已加载用户配置的密钥");
+                            showKeyPairInfo(publicKeyBase64, privateKeyBase64, publicKeyFile, privateKeyFile);
+                            Toast.makeText(MainActivity.this, 
+                                "✓ 已加载密钥文件", Toast.LENGTH_SHORT).show();
+                        }
                     });
                 } else {
                     runOnUiThread(() -> {
-                        tvStatus.setText("未找到密钥文件");
+                        Log.d(TAG, "未找到密钥文件");
+                        if (showToast) {
+                            tvStatus.setText("未找到密钥文件");
+                        }
                     });
                 }
                 
             } catch (Exception e) {
                 Log.e(TAG, "加载密钥失败", e);
                 runOnUiThread(() -> {
-                    tvStatus.setText("✗ 加载密钥失败: " + e.getMessage());
-                    Toast.makeText(MainActivity.this, 
-                        "加载密钥失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    if (showToast) {
+                        tvStatus.setText("✗ 加载密钥失败: " + e.getMessage());
+                        Toast.makeText(MainActivity.this, 
+                            "加载密钥失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+                    }
                 });
             }
         }).start();
@@ -1447,6 +1829,60 @@ public class MainActivity extends AppCompatActivity {
         FileOutputStream fos = new FileOutputStream(patchFile, true);
         fos.write("\n[TAMPERED] This file has been modified!".getBytes("UTF-8"));
         fos.close();
+    }
+    
+    /**
+     * 将签名嵌入到 zip 包内部
+     * @param patchFile 补丁文件
+     * @param signature Base64编码的签名
+     */
+    private void embedSignatureIntoZip(File patchFile, String signature) throws Exception {
+        try (net.lingala.zip4j.ZipFile zipFile = new net.lingala.zip4j.ZipFile(patchFile)) {
+            // 创建临时签名文件
+            File tempSigFile = File.createTempFile("signature", ".sig", getCacheDir());
+            try (FileOutputStream fos = new FileOutputStream(tempSigFile)) {
+                fos.write(signature.getBytes("UTF-8"));
+            }
+            
+            // 添加到 zip 包
+            net.lingala.zip4j.model.ZipParameters params = new net.lingala.zip4j.model.ZipParameters();
+            params.setFileNameInZip("signature.sig");
+            zipFile.addFile(tempSigFile, params);
+            
+            // 删除临时文件
+            tempSigFile.delete();
+            
+            Log.d(TAG, "✓ 签名文件已嵌入到 zip 包: signature.sig");
+        }
+    }
+    
+    /**
+     * 从 zip 包中提取签名
+     * @param patchFile 补丁文件
+     * @return Base64编码的签名，如果不存在则返回 null
+     */
+    private String extractSignatureFromZip(File patchFile) throws Exception {
+        try (net.lingala.zip4j.ZipFile zipFile = new net.lingala.zip4j.ZipFile(patchFile)) {
+            if (zipFile.getFileHeader("signature.sig") != null) {
+                // 提取到临时文件
+                File tempSigFile = File.createTempFile("extracted_sig", ".sig", getCacheDir());
+                zipFile.extractFile("signature.sig", tempSigFile.getParent(), tempSigFile.getName());
+                
+                // 读取签名内容
+                FileInputStream fis = new FileInputStream(tempSigFile);
+                byte[] buffer = new byte[(int) tempSigFile.length()];
+                fis.read(buffer);
+                fis.close();
+                String signature = new String(buffer, "UTF-8");
+                
+                // 删除临时文件
+                tempSigFile.delete();
+                
+                Log.d(TAG, "✓ 从 zip 内部提取签名成功");
+                return signature;
+            }
+        }
+        return null;
     }
     
     /**
@@ -1761,6 +2197,89 @@ public class MainActivity extends AppCompatActivity {
                 });
             }
         }).start();
+    }
+    
+    /**
+     * 显示安全设置对话框
+     */
+    private void showSecuritySettingsDialog() {
+        android.content.SharedPreferences securityPrefs = getSharedPreferences(PREFS_SECURITY, MODE_PRIVATE);
+        boolean requireSignature = securityPrefs.getBoolean(KEY_REQUIRE_SIGNATURE, false);
+        boolean requireEncryption = securityPrefs.getBoolean(KEY_REQUIRE_ENCRYPTION, false);
+        
+        // 创建对话框布局
+        android.widget.LinearLayout layout = new android.widget.LinearLayout(this);
+        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        layout.setPadding(50, 40, 50, 10);
+        
+        // 标题说明
+        TextView tvTitle = new TextView(this);
+        tvTitle.setText("配置补丁应用的安全策略：");
+        tvTitle.setTextSize(14);
+        tvTitle.setPadding(0, 0, 0, 20);
+        layout.addView(tvTitle);
+        
+        // 签名验证开关
+        android.widget.CheckBox cbRequireSignature = new android.widget.CheckBox(this);
+        cbRequireSignature.setText("🔒 强制要求补丁签名");
+        cbRequireSignature.setChecked(requireSignature);
+        layout.addView(cbRequireSignature);
+        
+        TextView tvSignatureHint = new TextView(this);
+        tvSignatureHint.setText("  开启后，只能应用已签名的补丁");
+        tvSignatureHint.setTextSize(12);
+        tvSignatureHint.setTextColor(0xFF666666);
+        tvSignatureHint.setPadding(0, 0, 0, 15);
+        layout.addView(tvSignatureHint);
+        
+        // 加密验证开关
+        android.widget.CheckBox cbRequireEncryption = new android.widget.CheckBox(this);
+        cbRequireEncryption.setText("🔐 强制要求补丁加密");
+        cbRequireEncryption.setChecked(requireEncryption);
+        layout.addView(cbRequireEncryption);
+        
+        TextView tvEncryptionHint = new TextView(this);
+        tvEncryptionHint.setText("  开启后，只能应用已加密的补丁");
+        tvEncryptionHint.setTextSize(12);
+        tvEncryptionHint.setTextColor(0xFF666666);
+        tvEncryptionHint.setPadding(0, 0, 0, 15);
+        layout.addView(tvEncryptionHint);
+        
+        // 安全说明
+        TextView tvNote = new TextView(this);
+        tvNote.setText("\n💡 安全建议：\n\n" +
+            "• 生产环境建议开启签名验证\n" +
+            "• 敏感应用建议同时开启加密\n" +
+            "• 开发测试时可以关闭验证\n" +
+            "• 修改设置后立即生效");
+        tvNote.setTextSize(12);
+        tvNote.setTextColor(0xFF666666);
+        layout.addView(tvNote);
+        
+        // 创建对话框
+        new AlertDialog.Builder(this)
+            .setTitle("🛡️ 安全策略设置")
+            .setView(layout)
+            .setPositiveButton("保存", (d, w) -> {
+                boolean newRequireSignature = cbRequireSignature.isChecked();
+                boolean newRequireEncryption = cbRequireEncryption.isChecked();
+                
+                // 保存设置
+                securityPrefs.edit()
+                    .putBoolean(KEY_REQUIRE_SIGNATURE, newRequireSignature)
+                    .putBoolean(KEY_REQUIRE_ENCRYPTION, newRequireEncryption)
+                    .apply();
+                
+                // 显示当前策略
+                StringBuilder status = new StringBuilder("✓ 安全策略已更新\n\n");
+                status.append("签名验证: ").append(newRequireSignature ? "✓ 已开启" : "✗ 已关闭").append("\n");
+                status.append("加密验证: ").append(newRequireEncryption ? "✓ 已开启" : "✗ 已关闭");
+                
+                tvStatus.setText(status.toString());
+                Toast.makeText(this, "✓ 安全策略已保存", Toast.LENGTH_SHORT).show();
+            })
+            .setNegativeButton("取消", null)
+            .show();
     }
 
     @Override

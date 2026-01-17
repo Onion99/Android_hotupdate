@@ -260,6 +260,170 @@ public class SecurityManager {
     // ==================== AES-256-GCM 加密/解密 ====================
     
     /**
+     * 加密补丁文件（使用密码）
+     * 使用 PBKDF2 从密码派生密钥，然后使用 AES-256-GCM 加密
+     * 
+     * @param patchFile 原始补丁文件
+     * @param password 加密密码
+     * @return 加密后的文件（.enc 扩展名）
+     * @throws SecurityException 如果加密失败
+     */
+    @RequiresApi(api = Build.VERSION_CODES.M)
+    public File encryptPatchWithPassword(File patchFile, String password) {
+        if (patchFile == null || !patchFile.exists()) {
+            throw new IllegalArgumentException("Patch file does not exist");
+        }
+        
+        if (password == null || password.isEmpty()) {
+            throw new IllegalArgumentException("Password cannot be null or empty");
+        }
+        
+        File encryptedFile = new File(patchFile.getPath() + ".enc");
+        
+        try {
+            // 从密码派生密钥
+            SecretKey key = deriveKeyFromPassword(password);
+            
+            // 初始化加密器（不提供 IV，让 Cipher 自动生成）
+            Cipher cipher = Cipher.getInstance(ENCRYPTION_ALGORITHM);
+            cipher.init(Cipher.ENCRYPT_MODE, key);
+            
+            // 读取原始文件
+            byte[] plainData = readFileBytes(patchFile);
+            
+            // 加密数据
+            byte[] encryptedData = cipher.doFinal(plainData);
+            
+            // 获取 Cipher 自动生成的 IV
+            byte[] iv = cipher.getIV();
+            
+            // 写入加密文件：IV + 加密数据（包含 auth tag）
+            try (FileOutputStream fos = new FileOutputStream(encryptedFile)) {
+                fos.write(iv);
+                fos.write(encryptedData);
+            }
+            
+            return encryptedFile;
+            
+        } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException |
+                 IllegalBlockSizeException | BadPaddingException | IOException e) {
+            Log.e(TAG, "Failed to encrypt patch file with password", e);
+            // 清理失败的加密文件
+            if (encryptedFile.exists()) {
+                encryptedFile.delete();
+            }
+            throw new SecurityException("Failed to encrypt patch file: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 解密补丁文件（使用密码）
+     * 使用 PBKDF2 从密码派生密钥，然后使用 AES-256-GCM 解密
+     * 
+     * @param encryptedFile 加密的补丁文件
+     * @param password 解密密码
+     * @return 解密后的文件
+     * @throws SecurityException 如果解密失败
+     */
+    @RequiresApi(api = Build.VERSION_CODES.M)
+    public File decryptPatchWithPassword(File encryptedFile, String password) {
+        if (encryptedFile == null || !encryptedFile.exists()) {
+            throw new IllegalArgumentException("Encrypted file does not exist");
+        }
+        
+        if (password == null || password.isEmpty()) {
+            throw new IllegalArgumentException("Password cannot be null or empty");
+        }
+        
+        // 生成解密后的文件路径（移除 .enc 扩展名）
+        String decryptedPath = encryptedFile.getPath();
+        if (decryptedPath.endsWith(".enc")) {
+            decryptedPath = decryptedPath.substring(0, decryptedPath.length() - 4);
+        } else {
+            decryptedPath = decryptedPath + ".dec";
+        }
+        File decryptedFile = new File(decryptedPath);
+        
+        try {
+            // 从密码派生密钥
+            SecretKey key = deriveKeyFromPassword(password);
+            
+            // 读取加密文件
+            byte[] encryptedContent = readFileBytes(encryptedFile);
+            
+            if (encryptedContent.length < GCM_IV_LENGTH) {
+                throw new SecurityException("Invalid encrypted file: too short");
+            }
+            
+            // 提取 IV
+            byte[] iv = new byte[GCM_IV_LENGTH];
+            System.arraycopy(encryptedContent, 0, iv, 0, GCM_IV_LENGTH);
+            
+            // 提取加密数据
+            byte[] encryptedData = new byte[encryptedContent.length - GCM_IV_LENGTH];
+            System.arraycopy(encryptedContent, GCM_IV_LENGTH, encryptedData, 0, encryptedData.length);
+            
+            // 初始化解密器
+            Cipher cipher = Cipher.getInstance(ENCRYPTION_ALGORITHM);
+            GCMParameterSpec spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
+            cipher.init(Cipher.DECRYPT_MODE, key, spec);
+            
+            // 解密数据
+            byte[] decryptedData = cipher.doFinal(encryptedData);
+            
+            // 写入解密文件
+            try (FileOutputStream fos = new FileOutputStream(decryptedFile)) {
+                fos.write(decryptedData);
+            }
+            
+            return decryptedFile;
+            
+        } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException |
+                 InvalidAlgorithmParameterException | IllegalBlockSizeException | 
+                 BadPaddingException | IOException e) {
+            Log.e(TAG, "Failed to decrypt patch file with password", e);
+            // 清理失败的解密文件
+            if (decryptedFile.exists()) {
+                decryptedFile.delete();
+            }
+            throw new SecurityException("Failed to decrypt patch file: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * 从密码派生密钥
+     * 使用 PBKDF2WithHmacSHA256 算法
+     * 
+     * @param password 密码
+     * @return 派生的密钥
+     */
+    @RequiresApi(api = Build.VERSION_CODES.M)
+    private SecretKey deriveKeyFromPassword(String password) {
+        try {
+            // 使用固定的盐值（实际应用中应该随机生成并存储）
+            // 这里为了简化，使用固定盐值
+            byte[] salt = "OrangeHotUpdateSalt2024".getBytes("UTF-8");
+            
+            // 使用 PBKDF2 派生密钥
+            javax.crypto.spec.PBEKeySpec spec = new javax.crypto.spec.PBEKeySpec(
+                password.toCharArray(), 
+                salt, 
+                10000,  // 迭代次数
+                AES_KEY_SIZE  // 密钥长度
+            );
+            
+            javax.crypto.SecretKeyFactory factory = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+            byte[] keyBytes = factory.generateSecret(spec).getEncoded();
+            
+            return new javax.crypto.spec.SecretKeySpec(keyBytes, KEY_ALGORITHM_AES);
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to derive key from password", e);
+            throw new SecurityException("Failed to derive key from password: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
      * 加密补丁文件
      * 使用 AES-256-GCM 加密，输出格式：[IV(12 bytes)] + [encrypted_data] + [auth_tag(16 bytes)]
      * 

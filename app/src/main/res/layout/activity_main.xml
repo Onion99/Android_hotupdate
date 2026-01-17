@@ -33,7 +33,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="🔥 热更新补丁工具 1.2"
+                    android:text="热更新补丁工具 1.0.0"
                     android:textSize="24sp"
                     android:textStyle="bold"
                     android:textColor="@color/text_primary"/>
@@ -261,6 +261,60 @@
                     android:textSize="12sp"
                     android:textColor="@color/text_secondary"
                     android:layout_marginBottom="12dp"/>
+
+                <Button
+                    android:id="@+id/btn_generate_keys"
+                    style="@style/Widget.AppCompat.Button.Borderless"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:text="🔑 生成RSA密钥对"
+                    android:textSize="14sp"
+                    android:textColor="@color/btn_text_color_selector"
+                    android:background="@drawable/btn_primary_bg"
+                    android:layout_marginBottom="8dp"/>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="8dp">
+
+                    <Button
+                        android:id="@+id/btn_config_keys"
+                        style="@style/Widget.AppCompat.Button.Borderless"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:text="⚙️ 配置密钥"
+                        android:textSize="14sp"
+                        android:textColor="@color/btn_text_color_selector"
+                        android:background="@drawable/btn_primary_bg"
+                        android:layout_marginEnd="4dp"/>
+
+                    <Button
+                        android:id="@+id/btn_load_keys"
+                        style="@style/Widget.AppCompat.Button.Borderless"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:text="📂 加载密钥"
+                        android:textSize="14sp"
+                        android:textColor="@color/btn_text_color_selector"
+                        android:background="@drawable/btn_primary_bg"
+                        android:layout_marginStart="4dp"/>
+
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/btn_security_settings"
+                    style="@style/Widget.AppCompat.Button.Borderless"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:text="🛡️ 安全策略设置"
+                    android:textSize="14sp"
+                    android:textColor="@color/btn_text_color_selector"
+                    android:background="@drawable/btn_primary_bg"
+                    android:layout_marginBottom="8dp"/>
 
                 <Button
                     android:id="@+id/btn_verify_success"
