@@ -111,14 +111,13 @@ public class HotUpdateHelper {
                 }
                 
                 // 2. 检查并处理 ZIP 密码加密
-                File actualPatchFile = patchFile;
                 ZipPasswordManager zipPasswordManager = storage.getZipPasswordManager();
                 
                 if (zipPasswordManager.isEncrypted(patchFile)) {
-                    Log.d(TAG, "检测到 ZIP 密码加密，正在验证...");
+                    Log.d(TAG, "检测到 ZIP 密码加密");
                     
                     if (callback != null) {
-                        callback.onProgress(15, "验证 ZIP 密码...");
+                        callback.onProgress(15, "检查 ZIP 密码保护...");
                     }
                     
                     // 检查是否有密码提示文件（.zippwd）
@@ -135,23 +134,17 @@ public class HotUpdateHelper {
                         return; // 等待用户输入密码后调用 applyPatchWithZipPassword()
                     }
                     
-                    // 使用派生密码
-                    String zipPassword = zipPasswordManager.getZipPassword();
-                    Log.d(TAG, "使用派生密码验证 ZIP");
-                    
-                    // 验证并解密
-                    actualPatchFile = decryptZipPatch(patchFile, zipPassword, callback);
-                    if (actualPatchFile == null) {
-                        return; // 解密失败，已通过 callback 报错
-                    }
+                    // 没有自定义密码，直接保存加密文件到 applied 目录
+                    // 应用启动时会自动使用派生密码解密
+                    Log.d(TAG, "使用派生密码，补丁将以加密状态保存");
                 }
                 
                 if (callback != null) {
                     callback.onProgress(20, "准备应用补丁...");
                 }
                 
-                // 3. 继续应用补丁流程
-                applyPatchInternal(actualPatchFile, patchFile, callback);
+                // 3. 继续应用补丁流程（ZIP 密码保护的补丁将以加密状态保存）
+                applyPatchInternal(patchFile, patchFile, callback);
                 
             } catch (Exception e) {
                 Log.e(TAG, "应用补丁失败", e);
@@ -659,16 +652,28 @@ public class HotUpdateHelper {
                     callback.onProgress(10, "验证 ZIP 密码...");
                 }
                 
-                // 2. 解密 ZIP
+                // 2. 验证 ZIP 密码
                 ZipPasswordManager zipPasswordManager = storage.getZipPasswordManager();
-                File actualPatchFile = decryptZipPatch(patchFile, zipPassword, callback);
+                boolean passwordValid = zipPasswordManager.verifyPassword(patchFile, zipPassword);
                 
-                if (actualPatchFile == null) {
-                    return; // 解密失败，已通过 callback 报错
+                if (!passwordValid) {
+                    if (callback != null) {
+                        callback.onError("⚠️ ZIP 密码验证失败！密码错误或补丁已被篡改。");
+                    }
+                    return;
                 }
                 
-                // 3. 继续应用补丁流程
-                applyPatchInternal(actualPatchFile, patchFile, callback);
+                Log.d(TAG, "✓ ZIP 密码验证成功");
+                
+                // 3. 保存自定义密码到 SharedPreferences（用于应用启动时解密）
+                android.content.SharedPreferences prefs = context.getSharedPreferences("patch_storage_prefs", Context.MODE_PRIVATE);
+                prefs.edit()
+                    .putBoolean("is_zip_password_protected", true)
+                    .putString("custom_zip_password", zipPassword)
+                    .apply();
+                
+                // 4. 继续应用补丁流程（保存加密文件到 applied 目录）
+                applyPatchInternal(patchFile, patchFile, callback);
                 
             } catch (Exception e) {
                 Log.e(TAG, "应用补丁失败", e);
@@ -754,6 +759,9 @@ public class HotUpdateHelper {
                 callback.onProgress(20, "准备应用补丁...");
             }
             
+            // 判断原始补丁是否是 ZIP 密码保护的
+            boolean isZipPasswordProtected = isZipPasswordProtected(originalPatchFile);
+            
             // 3. 创建 PatchInfo
             PatchInfo patchInfo = createPatchInfo(actualPatchFile);
             
@@ -762,7 +770,9 @@ public class HotUpdateHelper {
             }
             
             // 4. 读取补丁文件内容
-            byte[] patchData = readFileToBytes(actualPatchFile);
+            // 如果是 ZIP 密码保护的，保存原始加密文件；否则保存实际文件
+            File fileToSave = isZipPasswordProtected ? originalPatchFile : actualPatchFile;
+            byte[] patchData = readFileToBytes(fileToSave);
             if (patchData == null) {
                 if (callback != null) {
                     callback.onError("读取补丁文件失败");
@@ -770,13 +780,21 @@ public class HotUpdateHelper {
                 return;
             }
             
-            // 5. 保存补丁文件到存储
+            // 5. 保存补丁文件到存储（ZIP 密码保护的补丁保持加密状态）
             boolean saved = storage.savePatchFile(patchInfo.getPatchId(), patchData);
             if (!saved) {
                 if (callback != null) {
                     callback.onError("保存补丁文件失败");
                 }
                 return;
+            }
+            
+            // 保存 ZIP 密码标记（如果是 ZIP 密码保护的）
+            if (isZipPasswordProtected) {
+                // 保存一个标记，表示这个补丁是 ZIP 密码保护的
+                android.content.SharedPreferences prefs = context.getSharedPreferences("patch_storage_prefs", Context.MODE_PRIVATE);
+                prefs.edit().putBoolean("is_zip_password_protected", true).apply();
+                Log.d(TAG, "✓ 补丁已保存为加密状态到 applied 目录");
             }
             
             if (callback != null) {
@@ -852,6 +870,26 @@ public class HotUpdateHelper {
                 }
             }
             directory.delete();
+        }
+    }
+    
+    /**
+     * 检查补丁文件是否是 ZIP 密码保护的
+     * 通过检查是否存在 .zippwd 标记文件来判断
+     */
+    private boolean isZipPasswordProtected(File patchFile) {
+        // 检查是否有 .zippwd 标记文件
+        File zipPwdFile = new File(patchFile.getPath() + ".zippwd");
+        if (zipPwdFile.exists()) {
+            return true;
+        }
+        
+        // 或者尝试用 zip4j 检查是否加密
+        try {
+            net.lingala.zip4j.ZipFile zipFile = new net.lingala.zip4j.ZipFile(patchFile);
+            return zipFile.isEncrypted();
+        } catch (Exception e) {
+            return false;
         }
     }
     

@@ -69,17 +69,36 @@ public class PatchApplication extends Application {
                 }
             }
 
-            String patchPath = appliedFile.getAbsolutePath();
+            // 检查补丁是否是 ZIP 密码保护的
+            java.io.File actualPatchFile = appliedFile;
+            if (isZipPasswordProtected(appliedFile)) {
+                Log.d(TAG, "Patch is ZIP password protected, decrypting...");
+                
+                // 获取保存的自定义密码（如果有）
+                String customPassword = prefs.getString("custom_zip_password", null);
+                
+                // 自动解密 ZIP 密码保护的补丁
+                actualPatchFile = decryptZipPatchOnLoad(appliedFile, customPassword);
+                
+                if (actualPatchFile == null) {
+                    Log.e(TAG, "Failed to decrypt ZIP password protected patch");
+                    return;
+                }
+                
+                Log.d(TAG, "✓ ZIP password protected patch decrypted");
+            }
+
+            String patchPath = actualPatchFile.getAbsolutePath();
 
             // 检查补丁是否包含资源
-            if (hasResourcePatch(appliedFile)) {
+            if (hasResourcePatch(actualPatchFile)) {
                 Log.d(TAG, "Patch contains resources, merging with original APK");
 
                 // 使用 ResourceMerger 合并资源（Tinker 的方式）
                 java.io.File mergedResourceFile = new java.io.File(appliedDir, "merged_resources.apk");
 
                 boolean merged = ResourceMerger.mergeResources(
-                    this, appliedFile, mergedResourceFile);
+                    this, actualPatchFile, mergedResourceFile);
 
                 if (merged && mergedResourceFile.exists()) {
                     Log.i(TAG, "Resources merged successfully, size: " + mergedResourceFile.length());
@@ -295,5 +314,106 @@ public class PatchApplication extends Application {
         fos.flush();
         fos.close();
         fis.close();
+    }
+
+    /**
+     * 检查补丁是否是 ZIP 密码保护的
+     */
+    private boolean isZipPasswordProtected(java.io.File patchFile) {
+        try {
+            net.lingala.zip4j.ZipFile zipFile = new net.lingala.zip4j.ZipFile(patchFile);
+            return zipFile.isEncrypted();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+    
+    /**
+     * 在加载时解密 ZIP 密码保护的补丁
+     * 使用从应用签名派生的密码或保存的自定义密码自动解密
+     * 
+     * @param encryptedPatch 加密的补丁文件
+     * @param customPassword 自定义密码（如果有）
+     */
+    private java.io.File decryptZipPatchOnLoad(java.io.File encryptedPatch, String customPassword) {
+        try {
+            // 创建 ZipPasswordManager 实例
+            ZipPasswordManager zipPasswordManager = new ZipPasswordManager(this);
+            
+            // 获取密码：优先使用自定义密码，否则使用派生密码
+            String zipPassword;
+            if (customPassword != null && !customPassword.isEmpty()) {
+                Log.d(TAG, "Using custom ZIP password");
+                zipPassword = customPassword;
+            } else {
+                Log.d(TAG, "Using derived ZIP password");
+                zipPassword = zipPasswordManager.getZipPassword();
+            }
+            
+            // 解密到临时目录
+            java.io.File tempDir = new java.io.File(getCacheDir(), "patch_load_" + System.currentTimeMillis());
+            tempDir.mkdirs();
+            
+            boolean extracted = zipPasswordManager.extractEncryptedZip(encryptedPatch, tempDir, zipPassword);
+            
+            if (!extracted) {
+                Log.e(TAG, "Failed to extract encrypted ZIP");
+                deleteDirectory(tempDir);
+                return null;
+            }
+            
+            // 重新打包为未加密的 ZIP（临时文件）
+            java.io.File decryptedZip = new java.io.File(getCacheDir(), "patch_decrypted_" + System.currentTimeMillis() + ".zip");
+            repackZip(tempDir, decryptedZip);
+            
+            // 清理临时目录
+            deleteDirectory(tempDir);
+            
+            return decryptedZip;
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to decrypt ZIP password protected patch", e);
+            return null;
+        }
+    }
+    
+    /**
+     * 删除目录及其所有内容
+     */
+    private void deleteDirectory(java.io.File directory) {
+        if (directory.exists()) {
+            java.io.File[] files = directory.listFiles();
+            if (files != null) {
+                for (java.io.File file : files) {
+                    if (file.isDirectory()) {
+                        deleteDirectory(file);
+                    } else {
+                        file.delete();
+                    }
+                }
+            }
+            directory.delete();
+        }
+    }
+    
+    /**
+     * 重新打包目录为 ZIP 文件（不加密，不压缩）
+     */
+    private void repackZip(java.io.File sourceDir, java.io.File destZip) throws Exception {
+        net.lingala.zip4j.ZipFile zipFile = new net.lingala.zip4j.ZipFile(destZip);
+        net.lingala.zip4j.model.ZipParameters params = new net.lingala.zip4j.model.ZipParameters();
+        params.setCompressionMethod(net.lingala.zip4j.model.enums.CompressionMethod.STORE);
+        
+        // 添加目录中的所有文件和文件夹
+        java.io.File[] files = sourceDir.listFiles();
+        if (files != null) {
+            for (java.io.File file : files) {
+                if (file.isDirectory()) {
+                    zipFile.addFolder(file, params);
+                } else {
+                    zipFile.addFile(file, params);
+                }
+            }
+        }
     }
 }
