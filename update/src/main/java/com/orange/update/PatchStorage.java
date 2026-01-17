@@ -74,6 +74,7 @@ public class PatchStorage {
     private final Context context;
     private final SharedPreferences prefs;
     private final SecurityManager securityManager;
+    private final ZipPasswordManager zipPasswordManager;
     
     // 目录缓存
     private File updateDir;
@@ -105,6 +106,7 @@ public class PatchStorage {
         this.context = context.getApplicationContext();
         this.prefs = this.context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
         this.securityManager = securityManager != null ? securityManager : new SecurityManager(this.context);
+        this.zipPasswordManager = new ZipPasswordManager(this.context);
         
         // 初始化目录结构
         initDirectories();
@@ -996,6 +998,11 @@ public class PatchStorage {
     
     /**
      * 验证已应用补丁的完整性
+     * 
+     * 验证流程：
+     * 1. ZIP 密码验证（如果是加密 ZIP）
+     * 2. SHA-256 哈希验证
+     * 
      * @return 验证是否通过
      */
     public boolean verifyAppliedPatchIntegrity() {
@@ -1005,6 +1012,13 @@ public class PatchStorage {
             return false;
         }
         
+        // 第 1 层验证：ZIP 密码验证（如果是加密 ZIP）
+        if (!verifyZipPassword(appliedFile)) {
+            Log.e(TAG, "⚠️ ZIP password verification failed!");
+            return false;
+        }
+        
+        // 第 2 层验证：SHA-256 哈希验证
         String savedHash = prefs.getString(KEY_APPLIED_PATCH_HASH, null);
         if (savedHash == null || savedHash.isEmpty()) {
             Log.w(TAG, "No saved hash found, patch may be from old version (backward compatible)");
@@ -1020,7 +1034,7 @@ public class PatchStorage {
         boolean valid = savedHash.equals(currentHash);
         
         if (valid) {
-            Log.d(TAG, "✅ Patch integrity verified: " + currentHash.substring(0, 16) + "...");
+            Log.d(TAG, "✅ Patch integrity verified (ZIP + SHA-256): " + currentHash.substring(0, 16) + "...");
         } else {
             Log.e(TAG, "⚠️ PATCH INTEGRITY CHECK FAILED!");
             Log.e(TAG, "Expected: " + savedHash);
@@ -1030,6 +1044,14 @@ public class PatchStorage {
         
         return valid;
     }
+    
+    /**
+     * 验证 ZIP 密码
+     * 
+     * @param zipFile ZIP 文件
+     * @return 验证是否通过
+     */
+    // 已移动到文件末尾，避免重复定义
     
     /**
      * 验证并恢复补丁（如果检测到篡改）
@@ -1115,6 +1137,42 @@ public class PatchStorage {
     public void resetTamperCount() {
         prefs.edit().putInt(KEY_TAMPER_COUNT, 0).apply();
         Log.d(TAG, "Reset tamper count");
+    }
+    
+    /**
+     * 验证 ZIP 密码
+     * 
+     * @param zipFile ZIP 文件
+     * @return 验证是否通过
+     */
+    private boolean verifyZipPassword(File zipFile) {
+        // 检查是否是加密的 ZIP
+        if (!zipPasswordManager.isEncrypted(zipFile)) {
+            Log.d(TAG, "ZIP is not encrypted (backward compatible)");
+            return true; // 向后兼容：未加密的 ZIP
+        }
+        
+        Log.d(TAG, "Verifying ZIP password...");
+        String zipPassword = zipPasswordManager.getZipPassword();
+        
+        boolean valid = zipPasswordManager.verifyPassword(zipFile, zipPassword);
+        
+        if (valid) {
+            Log.d(TAG, "✅ ZIP password verified");
+        } else {
+            Log.e(TAG, "⚠️ ZIP PASSWORD VERIFICATION FAILED!");
+            Log.e(TAG, "ZIP file may have been tampered with or password is incorrect!");
+        }
+        
+        return valid;
+    }
+    
+    /**
+     * 获取 ZipPasswordManager 实例
+     * @return ZipPasswordManager 实例
+     */
+    public ZipPasswordManager getZipPasswordManager() {
+        return zipPasswordManager;
     }
     
     /**
