@@ -264,6 +264,166 @@ try {
 | 签名+加密（KeyStore） | ✅ | ✅ | ❌ | 生产环境 |
 | 签名+加密（密码） | ✅ | ✅ | ✅ | 最高安全级别 |
 
+### 8. 防篡改保护（v1.3.0 新增）
+
+为了防止补丁在解密后被恶意篡改，系统提供了**补丁完整性验证**和**自动恢复**功能。
+
+#### 功能特性
+
+- ✅ **SHA-256 哈希验证**：应用补丁时计算并保存哈希值
+- ✅ **启动时验证**：每次应用启动时验证补丁完整性
+- ✅ **自动检测篡改**：检测到文件被修改时自动识别
+- ✅ **自动恢复**：从加密存储中自动恢复被篡改的补丁
+- ✅ **篡改计数**：最多允许 3 次篡改尝试
+- ✅ **安全清除**：超过限制后自动清除补丁数据
+- ✅ **用户提示**：恢复成功后显示 Toast 提示重启
+
+#### 工作原理
+
+```
+应用启动 (attachBaseContext)
+    ↓
+检测补丁完整性（SHA-256）
+    ↓
+┌─────────────┬─────────────┐
+│  验证通过   │  验证失败   │
+│             │             │
+│  加载补丁   │  检测篡改   │
+│             │             │
+│  正常运行   │  删除文件   │
+└─────────────┴─────────────┘
+                    ↓
+            标记需要恢复
+                    ↓
+        Application.onCreate()
+                    ↓
+        从加密存储恢复补丁
+                    ↓
+            验证恢复结果
+                    ↓
+        ┌───────────────┐
+        │  恢复成功？   │
+        └───────────────┘
+            ↓       ↓
+          成功     失败
+            ↓       ↓
+        提示重启  增加计数
+            ↓       ↓
+        下次加载  超过3次
+        恢复补丁  清除数据
+```
+
+#### 使用方式
+
+**无需额外配置**，防篡改功能已自动集成到 `PatchApplication` 和 `HotUpdateHelper` 中：
+
+```java
+// 方式一：使用 PatchApplication（自动启用）
+public class MyApplication extends PatchApplication {
+    // 防篡改保护自动启用
+    // 每次启动时自动验证补丁完整性
+    // 检测到篡改时自动恢复
+}
+
+// 方式二：使用 HotUpdateHelper（自动启用）
+HotUpdateHelper helper = new HotUpdateHelper(context);
+helper.loadAppliedPatch(); // 自动验证完整性
+```
+
+#### 日志示例
+
+**正常加载（验证通过）**：
+```
+D PatchApplication: Loading applied patch: patch_1768678370576
+D PatchApplication: ✅ Patch integrity verified: 4f2db21b81332290...
+D PatchApplication: Patch contains resources, merging with original APK
+I PatchApplication: Resources merged successfully, size: 1440680
+D PatchApplication: Dex patch loaded successfully
+D PatchApplication: Resource patch loaded successfully
+I PatchApplication: ✅ Patch loading completed with integrity verification
+```
+
+**检测到篡改（自动恢复）**：
+```
+D PatchApplication: Loading applied patch: patch_1768678370576
+E PatchApplication: ⚠️ PATCH INTEGRITY CHECK FAILED!
+E PatchApplication: Expected: 4f2db21b813322904e7136432a804f6540ccb5cbb90470ea2c0ccd3bc6e47663
+E PatchApplication: Actual:   2fc7f3d53a193a527d3e521e0517bf22f4669f9afcd88d6924efbd95647ccace
+E PatchApplication: ⚠️ Patch integrity verification failed
+E PatchApplication: ⚠️ Patch tampered! Attempt: 1/3
+D PatchApplication: Deleted tampered patch file
+W PatchApplication: ⚠️ Patch cleared. Will attempt recovery in onCreate()
+
+I PatchApplication: 🔄 Attempting to recover patch from encrypted storage: patch_1768678370576
+D PatchStorage: Prepared patch to applied directory: patch_1768678370576
+D PatchStorage: Saved patch hash: 4f2db21b81332290...
+I PatchApplication: ✅ Patch recovered successfully from encrypted storage
+I PatchApplication: ✅ Hash verified: 4f2db21b81332290...
+I PatchApplication: ⚠️ Please restart the app to load the recovered patch
+
+[Toast 提示] 补丁已恢复，请重启应用
+```
+
+**超过篡改限制（清除数据）**：
+```
+E PatchApplication: ⚠️ Patch tampered! Attempt: 3/3
+E PatchApplication: ⚠️ Too many tamper attempts (3), clearing all patch metadata
+E PatchApplication: ⚠️ All patch data cleared. User needs to re-apply patch.
+```
+
+#### 安全保障层级
+
+现在热更新系统有 **5 层安全防护**：
+
+1. **下载时**：签名验证（防止网络传输被篡改）
+2. **存储时**：AES-256 加密（防止存储被窃取）
+3. **应用时**：SHA-256 哈希验证（防止解密后被篡改）✅ 新增
+4. **启动时**：完整性验证（防止运行时被篡改）✅ 新增
+5. **恢复时**：自动从加密存储恢复（自动修复）✅ 新增
+
+#### 测试防篡改功能
+
+可以手动篡改补丁文件来测试防篡改功能：
+
+```bash
+# 1. 应用补丁后，篡改补丁文件
+adb shell "echo 'tampered' >> /data/data/your.package/files/update/applied/current_patch.zip"
+
+# 2. 重启应用
+adb shell am force-stop your.package
+adb shell am start -n your.package/.MainActivity
+
+# 3. 查看日志
+adb logcat -s PatchApplication:* PatchStorage:*
+
+# 预期结果：
+# - 检测到篡改
+# - 自动从加密存储恢复
+# - 显示 Toast 提示重启
+# - 再次重启后补丁正常加载
+```
+
+#### 相关文档
+
+- [SECURITY_IMPROVEMENT.md](../SECURITY_IMPROVEMENT.md) - 详细的安全改进方案
+- [SECURITY_TEST_GUIDE.md](../SECURITY_TEST_GUIDE.md) - 完整的测试指南
+- [AUTO_RECOVERY_TEST.md](../AUTO_RECOVERY_TEST.md) - 自动恢复测试指南
+- [INTEGRITY_TEST_RESULT.md](../INTEGRITY_TEST_RESULT.md) - 测试结果报告
+
+#### 性能影响
+
+- **检测篡改**: ~10ms（SHA-256 计算）
+- **自动恢复**: ~100-200ms（解密 + 验证）
+- **用户感知**: 几乎无感知（在后台执行）
+
+#### 注意事项
+
+- ✅ 防篡改功能在 v1.3.0+ 版本中自动启用
+- ✅ 无需额外配置或代码修改
+- ✅ 兼容旧版本补丁（向后兼容）
+- ✅ 不影响正常的补丁应用流程
+- ✅ 恢复成功后需要重启应用才能加载恢复的补丁
+
 ## 补丁应用流程
 
 ### 1. 应用补丁

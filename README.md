@@ -521,12 +521,111 @@ UpdateManager.getInstance().checkUpdate();
 - 🔑 **密码加密支持自定义密码**，客户端需要相同密码才能解密
 - ⚙️ **Demo 应用支持安全策略配置**，可强制要求签名或加密
 
+## 🛡️ 防篡改保护（v1.3.0 新增）
+
+### 功能说明
+
+为了防止补丁在解密后被恶意篡改，系统提供了**补丁完整性验证**和**自动恢复**功能：
+
+- ✅ **SHA-256 哈希验证**：应用补丁时计算并保存哈希值
+- ✅ **启动时验证**：每次应用启动时验证补丁完整性
+- ✅ **自动检测篡改**：检测到文件被修改时自动识别
+- ✅ **自动恢复**：从加密存储中自动恢复被篡改的补丁
+- ✅ **篡改计数**：最多允许 3 次篡改尝试
+- ✅ **安全清除**：超过限制后自动清除补丁数据
+
+### 工作原理
+
+```
+应用启动 (attachBaseContext)
+    ↓
+检测补丁完整性（SHA-256）
+    ↓
+┌─────────────┬─────────────┐
+│  验证通过   │  验证失败   │
+│             │             │
+│  加载补丁   │  检测篡改   │
+│             │             │
+│  正常运行   │  删除文件   │
+└─────────────┴─────────────┘
+                    ↓
+            标记需要恢复
+                    ↓
+        Application.onCreate()
+                    ↓
+        从加密存储恢复补丁
+                    ↓
+            验证恢复结果
+                    ↓
+        ┌───────────────┐
+        │  恢复成功？   │
+        └───────────────┘
+            ↓       ↓
+          成功     失败
+            ↓       ↓
+        提示重启  增加计数
+            ↓       ↓
+        下次加载  超过3次
+        恢复补丁  清除数据
+```
+
+### 安全保障层级
+
+1. **下载时**：签名验证（防止网络传输被篡改）
+2. **存储时**：AES-256 加密（防止存储被窃取）
+3. **应用时**：SHA-256 哈希验证（防止解密后被篡改）✅ 新增
+4. **启动时**：完整性验证（防止运行时被篡改）✅ 新增
+5. **恢复时**：自动从加密存储恢复（自动修复）✅ 新增
+
+### 使用方式
+
+**无需额外配置**，防篡改功能已自动集成到 `PatchApplication` 和 `HotUpdateHelper` 中：
+
+```java
+// 方式一：使用 PatchApplication（自动启用）
+public class MyApplication extends PatchApplication {
+    // 自动启用防篡改保护
+}
+
+// 方式二：使用 HotUpdateHelper（自动启用）
+HotUpdateHelper helper = new HotUpdateHelper(context);
+helper.loadAppliedPatch(); // 自动验证完整性
+```
+
+### 日志示例
+
+**正常加载（验证通过）**：
+```
+D PatchApplication: ✅ Patch integrity verified: 4f2db21b81332290...
+I PatchApplication: ✅ Patch loading completed with integrity verification
+```
+
+**检测到篡改（自动恢复）**：
+```
+E PatchApplication: ⚠️ PATCH INTEGRITY CHECK FAILED!
+E PatchApplication: Expected: 4f2db21b813322904e7136432a804f6540ccb5cbb90470ea2c0ccd3bc6e47663
+E PatchApplication: Actual:   2fc7f3d53a193a527d3e521e0517bf22f4669f9afcd88d6924efbd95647ccace
+E PatchApplication: ⚠️ Patch tampered! Attempt: 1/3
+W PatchApplication: ⚠️ Patch cleared. Will attempt recovery in onCreate()
+I PatchApplication: 🔄 Attempting to recover patch from encrypted storage
+I PatchApplication: ✅ Patch recovered successfully from encrypted storage
+I PatchApplication: ⚠️ Please restart the app to load the recovered patch
+```
+
+### 相关文档
+
+- [SECURITY_IMPROVEMENT.md](SECURITY_IMPROVEMENT.md) - 详细的安全改进方案
+- [SECURITY_TEST_GUIDE.md](SECURITY_TEST_GUIDE.md) - 完整的测试指南
+- [AUTO_RECOVERY_TEST.md](AUTO_RECOVERY_TEST.md) - 自动恢复测试指南
+- [INTEGRITY_TEST_RESULT.md](INTEGRITY_TEST_RESULT.md) - 测试结果报告
+
 ## 🛡️ 安全最佳实践
 
 ### 开发环境
 - ✅ 可以跳过签名验证（`debugMode(true)`）
 - ✅ 可以使用未加密补丁
 - ✅ 快速迭代测试
+- ✅ 防篡改保护自动启用
 
 ### 生产环境
 - ✅ **必须启用签名验证**
@@ -535,6 +634,7 @@ UpdateManager.getInstance().checkUpdate();
 - ✅ **验证补丁 MD5/SHA256**
 - ✅ **监控补丁应用成功率**
 - ✅ **提供补丁回滚机制**
+- ✅ **防篡改保护自动启用**（v1.3.0+）
 
 ### 密钥管理
 - 🔑 **私钥**: 只在服务器端使用，严格保密
