@@ -167,32 +167,33 @@ String password = "your_secure_password";
 File encryptedPatch = securityManager.encryptPatchWithPassword(patchFile, password);
 // 生成加密文件: patch.zip.enc
 
-// 步骤 2: 客户端自动解密并应用
-// 客户端会自动检测 .enc 扩展名并弹出密码输入对话框
-RealHotUpdate hotUpdate = new RealHotUpdate(context);
-hotUpdate.applyPatch(encryptedPatch, new RealHotUpdate.ApplyCallback() {
-    @Override
-    public void onSuccess(RealHotUpdate.PatchResult result) {
-        Log.i(TAG, "补丁解密并应用成功！");
+// 步骤 2: 客户端解密并应用（推荐方式）
+SecurityManager securityManager = new SecurityManager(context);
+File encryptedPatch = new File("/path/to/patch.zip.enc");
+
+try {
+    File decryptedPatch;
+    
+    // 根据加密方式选择解密方法
+    if (hasPassword) {
+        // 使用密码解密（密码作为参数传入）
+        String password = getPasswordFromConfig(); // 从配置或安全存储获取
+        decryptedPatch = securityManager.decryptPatchWithPassword(encryptedPatch, password);
+    } else {
+        // 使用 KeyStore 解密
+        decryptedPatch = securityManager.decryptPatch(encryptedPatch);
     }
     
-    @Override
-    public void onError(String message) {
-        Log.e(TAG, "解密或应用失败: " + message);
-    }
-});
-// 注意：
-// - 如果使用了密码加密，会自动弹出密码输入对话框
-// - 用户需要输入正确的密码才能解密
-// - 如果使用 KeyStore 加密，可以留空直接解密
-
-// 步骤 3: 手动解密（可选）
-try {
-    File decryptedPatch = securityManager.decryptPatch(encryptedPatch);
-    Log.i(TAG, "补丁解密成功: " + decryptedPatch.getPath());
+    // 应用解密后的补丁
+    RealHotUpdate hotUpdate = new RealHotUpdate(context);
+    hotUpdate.applyPatch(decryptedPatch, callback);
+    
 } catch (SecurityException e) {
     Log.e(TAG, "解密失败: " + e.getMessage());
 }
+
+// 注意：Demo 应用会弹出密码输入对话框，这只是为了演示方便
+// 在实际应用中，应该通过参数传入密码，而不是弹窗
 ```
 
 **8. 组合使用签名和加密（最高安全级别）**

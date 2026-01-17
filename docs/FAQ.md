@@ -193,14 +193,30 @@ File encryptedPatch = securityManager.encryptPatch(patchFile);
 - 密码加密适合需要跨设备使用的场景
 
 ### Q: 如何使用密码加密补丁？
-**A:** 使用 `encryptPatchWithPassword` 方法：
+**A:** 使用 `encryptPatchWithPassword` 和 `decryptPatchWithPassword` 方法：
+
+**加密：**
 ```java
 SecurityManager securityManager = new SecurityManager(context);
 String password = "your_secure_password";
 File encryptedPatch = securityManager.encryptPatchWithPassword(patchFile, password);
 ```
-- 客户端应用时会自动提示输入密码
-- 密码错误会导致解密失败
+
+**解密：**
+```java
+SecurityManager securityManager = new SecurityManager(context);
+String password = getPasswordFromConfig(); // 从配置或安全存储获取
+File decryptedPatch = securityManager.decryptPatchWithPassword(encryptedPatch, password);
+
+// 然后应用解密后的补丁
+RealHotUpdate hotUpdate = new RealHotUpdate(context);
+hotUpdate.applyPatch(decryptedPatch, callback);
+```
+
+**注意：**
+- 密码作为参数传入，不应该弹窗让用户输入
+- Demo 应用的密码输入对话框只是为了演示方便
+- 在实际应用中，密码应该从配置文件、服务器或安全存储中获取
 - 建议使用强密码（至少 8 位，包含字母数字）
 
 ### Q: 密码加密和 KeyStore 加密有什么区别？

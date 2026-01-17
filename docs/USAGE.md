@@ -263,42 +263,73 @@ hotUpdate.applyPatch(patchFile, new RealHotUpdate.ApplyCallback() {
 
 ### 2. 应用加密补丁
 
-应用会自动检测并解密加密补丁（`.enc` 扩展名）：
+#### 方式一：使用 SecurityManager 手动解密（推荐）
+
+```java
+SecurityManager securityManager = new SecurityManager(context);
+File encryptedPatch = new File("/path/to/patch.zip.enc");
+
+try {
+    File decryptedPatch;
+    
+    // 根据加密方式选择解密方法
+    if (hasPassword) {
+        // 使用密码解密
+        String password = "your_secure_password"; // 从配置或用户输入获取
+        decryptedPatch = securityManager.decryptPatchWithPassword(encryptedPatch, password);
+    } else {
+        // 使用 KeyStore 解密
+        decryptedPatch = securityManager.decryptPatch(encryptedPatch);
+    }
+    
+    Log.i(TAG, "解密成功: " + decryptedPatch.getPath());
+    
+    // 应用解密后的补丁
+    RealHotUpdate hotUpdate = new RealHotUpdate(context);
+    hotUpdate.applyPatch(decryptedPatch, callback);
+    
+} catch (SecurityException e) {
+    Log.e(TAG, "解密失败: " + e.getMessage());
+    // 可能的错误：
+    // - "解密需要 Android 6.0+"
+    // - "Tag mismatch" (密码错误)
+    // - "文件损坏"
+}
+```
+
+#### 方式二：自动检测并解密（Demo 应用方式）
+
+Demo 应用会自动检测 `.enc` 文件并弹出密码输入对话框，这只是为了演示方便：
 
 ```java
 RealHotUpdate hotUpdate = new RealHotUpdate(context);
 
-// 自动检测加密补丁并解密
+// Demo 应用会自动检测 .enc 扩展名
 File encryptedPatch = new File("/path/to/patch.zip.enc");
 hotUpdate.applyPatch(encryptedPatch, new RealHotUpdate.ApplyCallback() {
     @Override
     public void onProgress(int percent, String message) {
-        // 会显示 "正在解密补丁..." 和 "正在应用补丁..." 等状态
         Log.d(TAG, message + ": " + percent + "%");
     }
     
     @Override
     public void onSuccess(RealHotUpdate.PatchResult result) {
-        Log.i(TAG, "加密补丁解密并应用成功！");
+        Log.i(TAG, "补丁应用成功！");
     }
     
     @Override
     public void onError(String message) {
-        Log.e(TAG, "解密或应用失败: " + message);
-        // 可能的错误：
-        // - "解密需要 Android 6.0+"
-        // - "解密失败: [具体原因]"
-        // - 其他应用错误
+        Log.e(TAG, "应用失败: " + message);
     }
 });
+// 注意：Demo 应用会弹出密码输入对话框，这只是 UI 演示
+// 在实际应用中，应该使用方式一，通过参数传入密码
 ```
 
-**密码验证流程：**
-1. 检测到 `.enc` 文件后，会**自动弹出密码输入对话框**
-2. 如果生成时使用了自定义密码，用户需要输入相同密码
-3. 如果生成时未设置密码（使用 KeyStore），可以留空直接解密
-4. 密码错误会导致解密失败，显示错误提示
-5. 整个过程由 `RealHotUpdate` 自动处理，无需手动调用解密方法
+**推荐做法：**
+- 在实际应用中，使用 `SecurityManager` 手动解密，密码作为参数传入
+- 密码可以从配置文件、服务器、或安全存储中获取
+- Demo 应用的弹窗只是为了演示方便，不应该在生产环境中使用
 
 **手动解密（可选）：**
 
