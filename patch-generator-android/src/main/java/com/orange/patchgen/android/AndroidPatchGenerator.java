@@ -329,10 +329,10 @@ public class AndroidPatchGenerator {
                 // 如果重命名失败，尝试复制（使用兼容 API 21 的方法）
                 try (java.io.FileInputStream fis = new java.io.FileInputStream(tempFile);
                      java.io.FileOutputStream fos = new java.io.FileOutputStream(patchFile)) {
-                    byte[] buffer = new byte[8192];
+                    byte[] copyBuffer = new byte[8192];
                     int length;
-                    while ((length = fis.read(buffer)) > 0) {
-                        fos.write(buffer, 0, length);
+                    while ((length = fis.read(copyBuffer)) > 0) {
+                        fos.write(copyBuffer, 0, length);
                     }
                 } catch (Exception e) {
                     System.err.println("Failed to copy temp file: " + e.getMessage());
