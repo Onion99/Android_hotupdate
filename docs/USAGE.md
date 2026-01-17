@@ -565,9 +565,19 @@ Log.d(TAG, "要求签名: " + requireSignature + ", 要求加密: " + requireEnc
 
 ## Application 集成
 
-为了让补丁在应用启动时自动加载，需要在 `Application` 中集成：
+为了让补丁在应用启动时自动加载，需要在 `Application` 中集成热更新功能。这是**必须**的步骤，否则补丁不会生效。
+
+### 方式一：使用 HotUpdateHelper（推荐 - 最简单）
+
+**1. 创建自定义 Application 类**
 
 ```java
+package com.example.myapp;
+
+import android.app.Application;
+import android.content.Context;
+import com.orange.update.HotUpdateHelper;
+
 public class MyApplication extends Application {
     
     @Override
@@ -578,22 +588,637 @@ public class MyApplication extends Application {
         HotUpdateHelper helper = new HotUpdateHelper(this);
         helper.loadAppliedPatch();
     }
+}
+```
+
+**2. 在 AndroidManifest.xml 中注册**
+
+```xml
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.example.myapp">
+    
+    <application
+        android:name=".MyApplication"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        ...>
+        
+        <!-- 其他配置 -->
+        
+    </application>
+</manifest>
+```
+
+### 方式二：直接继承 PatchApplication（Demo 应用方式）
+
+如果你想使用 Demo 应用中的完整实现，可以直接继承 `PatchApplication`：
+
+**1. 将 PatchApplication 复制到你的项目**
+
+从 Demo 应用复制 `app/src/main/java/com/orange/update/PatchApplication.java` 到你的项目中。
+
+**2. 继承 PatchApplication**
+
+```java
+package com.example.myapp;
+
+import com.orange.update.PatchApplication;
+
+public class MyApplication extends PatchApplication {
     
     @Override
     public void onCreate() {
         super.onCreate();
         
-        // 其他初始化代码
+        // 你的其他初始化代码
+        initSDK();
+    }
+    
+    private void initSDK() {
+        // 初始化第三方 SDK
+    }
+}
+```
+
+**3. 在 AndroidManifest.xml 中注册**
+
+```xml
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.example.myapp">
+    
+    <application
+        android:name=".MyApplication"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        ...>
+        
+        <!-- 其他配置 -->
+        
+    </application>
+</manifest>
+```
+
+**PatchApplication 的优势：**
+- ✅ 已经实现了完整的补丁加载逻辑
+- ✅ 包含资源合并（Tinker 方式）
+- ✅ 自动检测补丁类型（DEX/资源）
+- ✅ 完善的错误处理和日志
+- ✅ 在 attachBaseContext 中正确加载补丁
+
+### 为什么必须在 attachBaseContext 中？
+
+`attachBaseContext()` 是 Application 生命周期中**最早**的回调方法，在这里加载补丁可以确保：
+
+1. **DEX 补丁在类加载前注入** - 所有类加载时都能使用补丁中的代码
+2. **资源补丁在 Activity 创建前加载** - 所有 Activity 都能使用补丁中的资源
+3. **避免类加载冲突** - 如果在 `onCreate()` 中加载，某些类可能已经被加载
+
+**错误示例（不要这样做）：**
+```java
+@Override
+public void onCreate() {
+    super.onCreate();
+    
+    // ❌ 错误：太晚了，某些类已经被加载
+    HotUpdateHelper helper = new HotUpdateHelper(this);
+    helper.loadAppliedPatch();
+}
+```
+
+### 高级配置
+
+#### 1. 添加日志和错误处理
+
+```java
+public class MyApplication extends Application {
+    
+    private static final String TAG = "MyApplication";
+    
+    @Override
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(base);
+        
+        try {
+            HotUpdateHelper helper = new HotUpdateHelper(this);
+            helper.loadAppliedPatch();
+            
+            // 检查是否有已应用的补丁
+            if (helper.hasAppliedPatch()) {
+                PatchInfo patchInfo = helper.getAppliedPatchInfo();
+                Log.i(TAG, "已加载补丁: " + patchInfo.getPatchVersion());
+            } else {
+                Log.d(TAG, "没有已应用的补丁");
+            }
+            
+        } catch (Exception e) {
+            Log.e(TAG, "加载补丁失败", e);
+            // 不要抛出异常，让应用继续运行
+        }
+    }
+}
+```
+
+#### 2. 条件加载补丁
+
+```java
+public class MyApplication extends Application {
+    
+    @Override
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(base);
+        
+        // 只在非调试模式下加载补丁
+        if (!BuildConfig.DEBUG) {
+            HotUpdateHelper helper = new HotUpdateHelper(this);
+            helper.loadAppliedPatch();
+        }
+    }
+}
+```
+
+#### 3. PatchApplication 完整源码（Demo 实现）
+
+Demo 应用中的 `PatchApplication` 完整实现如下（位于 `app/src/main/java/com/orange/update/PatchApplication.java`）：
+
+```java
+package com.orange.update;
+
+import android.app.Application;
+import android.content.Context;
+import android.util.Log;
+
+/**
+ * 热更新 Application
+ * 
+ * 在 attachBaseContext 中加载补丁，确保：
+ * 1. DEX 补丁在类加载前注入
+ * 2. 资源补丁在 Activity 创建前加载
+ * 3. 所有组件都能使用更新后的代码和资源
+ */
+public class PatchApplication extends Application {
+    
+    private static final String TAG = "PatchApplication";
+    
+    @Override
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(base);
+        
+        // 在最早的时机加载补丁
+        loadPatchIfNeeded();
+    }
+    
+    /**
+     * 加载已应用的补丁
+     * 
+     * 1. 检查是否有已应用的补丁
+     * 2. 如果补丁包含资源，使用 ResourceMerger 合并原始 APK 和补丁资源
+     * 3. 生成完整资源包到 merged_resources.apk
+     * 4. 加载完整资源包（而不是直接使用补丁）
+     * 5. 加载 DEX 补丁
+     */
+    private void loadPatchIfNeeded() {
+        try {
+            // 注意：在 attachBaseContext 中不能使用 getApplicationContext()
+            // 因为 Application 还没有完全初始化，需要手动创建 SharedPreferences
+            android.content.SharedPreferences prefs = getSharedPreferences("patch_storage_prefs", Context.MODE_PRIVATE);
+            String appliedPatchId = prefs.getString("applied_patch_id", null);
+            
+            if (appliedPatchId == null || appliedPatchId.isEmpty()) {
+                Log.d(TAG, "No applied patch to load");
+                return;
+            }
+            
+            Log.d(TAG, "Loading applied patch: " + appliedPatchId);
+            
+            // 获取已应用的补丁文件
+            java.io.File updateDir = new java.io.File(getFilesDir(), "update");
+            java.io.File appliedDir = new java.io.File(updateDir, "applied");
+            java.io.File appliedFile = new java.io.File(appliedDir, "current_patch.zip");
+            
+            if (!appliedFile.exists()) {
+                Log.w(TAG, "Applied patch file not found: " + appliedFile.getAbsolutePath());
+                return;
+            }
+            
+            String patchPath = appliedFile.getAbsolutePath();
+            
+            // 检查补丁是否包含资源
+            if (hasResourcePatch(appliedFile)) {
+                Log.d(TAG, "Patch contains resources, merging with original APK");
+                
+                // 使用 ResourceMerger 合并资源（Tinker 的方式）
+                java.io.File mergedResourceFile = new java.io.File(appliedDir, "merged_resources.apk");
+                
+                boolean merged = ResourceMerger.mergeResources(
+                    this, appliedFile, mergedResourceFile);
+                
+                if (merged && mergedResourceFile.exists()) {
+                    Log.i(TAG, "Resources merged successfully, size: " + mergedResourceFile.length());
+                    // 使用合并后的完整资源包
+                    patchPath = mergedResourceFile.getAbsolutePath();
+                } else {
+                    Log.w(TAG, "Failed to merge resources, using patch directly");
+                }
+            }
+            
+            // 注入 DEX 补丁
+            if (!DexPatcher.isPatchInjected(this, patchPath)) {
+                DexPatcher.injectPatchDex(this, patchPath);
+                Log.d(TAG, "Dex patch loaded successfully");
+            }
+            
+            // 加载资源补丁（使用合并后的完整资源包）
+            try {
+                ResourcePatcher.loadPatchResources(this, patchPath);
+                Log.d(TAG, "Resource patch loaded successfully");
+            } catch (ResourcePatcher.PatchResourceException e) {
+                Log.w(TAG, "Failed to load resource patch", e);
+            }
+            
+            Log.i(TAG, "Patch loading completed in attachBaseContext");
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to load patch in attachBaseContext", e);
+        }
+    }
+    
+    /**
+     * 检查补丁是否包含资源
+     */
+    private boolean hasResourcePatch(java.io.File patchFile) {
+        String fileName = patchFile.getName().toLowerCase(java.util.Locale.ROOT);
+        
+        // 如果是 APK 或 ZIP 文件，可能包含资源
+        if (fileName.endsWith(".apk") || fileName.endsWith(".zip")) {
+            return true;
+        }
+        
+        // 如果是纯 DEX 文件，不包含资源
+        if (fileName.endsWith(".dex")) {
+            return false;
+        }
+        
+        // 检查文件魔数
+        try {
+            byte[] header = new byte[4];
+            java.io.FileInputStream fis = new java.io.FileInputStream(patchFile);
+            fis.read(header);
+            fis.close();
+            
+            // ZIP/APK 魔数: PK (0x50 0x4B)
+            if (header[0] == 0x50 && header[1] == 0x4B) {
+                return true;
+            }
+            
+            // DEX 魔数: dex\n (0x64 0x65 0x78 0x0A)
+            if (header[0] == 0x64 && header[1] == 0x65 && 
+                header[2] == 0x78 && header[3] == 0x0A) {
+                return false;
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to check patch file type", e);
+        }
+        
+        return false;
+    }
+}
+```
+
+**关键实现细节：**
+
+1. **在 attachBaseContext 中不能使用 getApplicationContext()**
+   - Application 还没有完全初始化
+   - 需要直接使用 `getSharedPreferences()` 和 `getFilesDir()`
+
+2. **资源合并是必须的**
+   - 补丁只包含差异资源，不是完整资源包
+   - 使用 `ResourceMerger.mergeResources()` 合并原始 APK 和补丁
+   - 生成完整资源包到 `merged_resources.apk`
+   - 加载完整资源包而不是直接使用补丁
+
+3. **文件类型检测**
+   - 通过文件扩展名和魔数判断是否包含资源
+   - ZIP/APK 魔数: `PK` (0x50 0x4B)
+   - DEX 魔数: `dex\n` (0x64 0x65 0x78 0x0A)
+
+4. **错误处理**
+   - 资源加载失败时使用 try-catch 捕获
+   - 不影响应用正常启动
+   - 记录详细日志便于调试
+
+### 常见问题
+
+#### Q1: 为什么补丁不生效？
+
+**检查清单：**
+1. ✅ 是否在 `attachBaseContext()` 中调用了 `loadAppliedPatch()`？
+2. ✅ 是否在 `AndroidManifest.xml` 中注册了自定义 Application？
+3. ✅ 是否成功应用了补丁？（检查日志）
+4. ✅ 资源更新是否重启了应用？
+
+#### Q2: 如何验证补丁是否加载？
+
+```java
+@Override
+protected void attachBaseContext(Context base) {
+    super.attachBaseContext(base);
+    
+    HotUpdateHelper helper = new HotUpdateHelper(this);
+    helper.loadAppliedPatch();
+    
+    // 验证补丁是否加载
+    if (helper.hasAppliedPatch()) {
+        PatchInfo info = helper.getAppliedPatchInfo();
+        Log.i(TAG, "✅ 补丁已加载");
+        Log.i(TAG, "补丁ID: " + info.getPatchId());
+        Log.i(TAG, "补丁版本: " + info.getPatchVersion());
+    } else {
+        Log.d(TAG, "没有已应用的补丁");
+    }
+}
+```
+
+#### Q3: 如何在多进程应用中使用？
+
+如果你的应用有多个进程，需要在每个进程的 Application 中都加载补丁：
+
+```java
+public class MyApplication extends Application {
+    
+    @Override
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(base);
+        
+        // 获取当前进程名
+        String processName = getProcessName();
+        Log.d(TAG, "Current process: " + processName);
+        
+        // 在所有进程中加载补丁
+        HotUpdateHelper helper = new HotUpdateHelper(this);
+        helper.loadAppliedPatch();
+    }
+    
+    private String getProcessName() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            return Application.getProcessName();
+        }
+        
+        // API < 28 的兼容方案
+        try {
+            Class<?> activityThread = Class.forName("android.app.ActivityThread");
+            Method currentProcessName = activityThread.getDeclaredMethod("currentProcessName");
+            return (String) currentProcessName.invoke(null);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+}
+```
+
+#### Q4: 如何处理加载失败？
+
+```java
+@Override
+protected void attachBaseContext(Context base) {
+    super.attachBaseContext(base);
+    
+    try {
+        HotUpdateHelper helper = new HotUpdateHelper(this);
+        helper.loadAppliedPatch();
+        
+    } catch (Exception e) {
+        Log.e(TAG, "补丁加载失败", e);
+        
+        // 选项1: 清除失败的补丁
+        try {
+            HotUpdateHelper helper = new HotUpdateHelper(this);
+            helper.clearPatch();
+            Log.i(TAG, "已清除失败的补丁");
+        } catch (Exception ex) {
+            Log.e(TAG, "清除补丁失败", ex);
+        }
+        
+        // 选项2: 上报错误到服务器
+        reportError("patch_load_failed", e.getMessage());
+        
+        // 不要抛出异常，让应用继续运行
+    }
+}
+```
+
+#### Q5: 如何在 Application 中显示补丁信息？
+
+```java
+public class MyApplication extends Application {
+    
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        
+        // 在 onCreate 中可以安全地访问 UI
+        HotUpdateHelper helper = new HotUpdateHelper(this);
+        
+        if (helper.hasAppliedPatch()) {
+            PatchInfo info = helper.getAppliedPatchInfo();
+            
+            // 显示 Toast（可选）
+            if (BuildConfig.DEBUG) {
+                Toast.makeText(this, 
+                    "已加载补丁: " + info.getPatchVersion(), 
+                    Toast.LENGTH_SHORT).show();
+            }
+            
+            // 或者发送广播通知 Activity
+            Intent intent = new Intent("com.example.PATCH_LOADED");
+            intent.putExtra("patch_version", info.getPatchVersion());
+            sendBroadcast(intent);
+        }
+    }
+}
+```
+
+### 性能优化
+
+#### 1. 异步加载（不推荐）
+
+补丁加载必须在 `attachBaseContext` 中**同步**完成，不能异步加载，否则会导致类加载冲突。
+
+**错误示例（不要这样做）：**
+```java
+@Override
+protected void attachBaseContext(Context base) {
+    super.attachBaseContext(base);
+    
+    // ❌ 错误：异步加载会导致类加载冲突
+    new Thread(() -> {
+        HotUpdateHelper helper = new HotUpdateHelper(this);
+        helper.loadAppliedPatch();
+    }).start();
+}
+```
+
+#### 2. 缓存优化
+
+`HotUpdateHelper` 已经内置了缓存优化：
+- 补丁文件缓存在 `/data/data/{package}/files/update/applied/`
+- 资源合并结果缓存为 `merged_resources.apk`
+- 避免重复合并和解密
+
+#### 3. 启动时间优化
+
+补丁加载通常只需要 50-200ms，对启动时间影响很小。如果需要进一步优化：
+
+```java
+@Override
+protected void attachBaseContext(Context base) {
+    super.attachBaseContext(base);
+    
+    long startTime = System.currentTimeMillis();
+    
+    HotUpdateHelper helper = new HotUpdateHelper(this);
+    helper.loadAppliedPatch();
+    
+    long endTime = System.currentTimeMillis();
+    Log.d(TAG, "补丁加载耗时: " + (endTime - startTime) + "ms");
+}
+```
+
+### 完整示例
+
+```java
+package com.example.myapp;
+
+import android.app.Application;
+import android.content.Context;
+import android.util.Log;
+import com.orange.update.HotUpdateHelper;
+import com.orange.update.PatchInfo;
+
+/**
+ * 自定义 Application
+ * 
+ * 功能：
+ * 1. 在 attachBaseContext 中加载补丁
+ * 2. 记录补丁加载日志
+ * 3. 处理加载失败情况
+ */
+public class MyApplication extends Application {
+    
+    private static final String TAG = "MyApplication";
+    
+    @Override
+    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(base);
+        
+        // 加载补丁
+        loadPatch();
+    }
+    
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        
+        // 初始化其他 SDK
+        initSDKs();
+        
+        // 显示补丁信息（可选）
+        showPatchInfo();
+    }
+    
+    /**
+     * 加载补丁
+     */
+    private void loadPatch() {
+        try {
+            long startTime = System.currentTimeMillis();
+            
+            HotUpdateHelper helper = new HotUpdateHelper(this);
+            helper.loadAppliedPatch();
+            
+            long endTime = System.currentTimeMillis();
+            Log.d(TAG, "补丁加载耗时: " + (endTime - startTime) + "ms");
+            
+            // 验证补丁是否加载
+            if (helper.hasAppliedPatch()) {
+                PatchInfo info = helper.getAppliedPatchInfo();
+                Log.i(TAG, "✅ 补丁已加载: " + info.getPatchVersion());
+            } else {
+                Log.d(TAG, "没有已应用的补丁");
+            }
+            
+        } catch (Exception e) {
+            Log.e(TAG, "补丁加载失败", e);
+            
+            // 清除失败的补丁
+            try {
+                HotUpdateHelper helper = new HotUpdateHelper(this);
+                helper.clearPatch();
+                Log.i(TAG, "已清除失败的补丁");
+            } catch (Exception ex) {
+                Log.e(TAG, "清除补丁失败", ex);
+            }
+        }
+    }
+    
+    /**
+     * 初始化第三方 SDK
+     */
+    private void initSDKs() {
+        // 初始化其他 SDK
+        Log.d(TAG, "初始化 SDK");
+    }
+    
+    /**
+     * 显示补丁信息
+     */
+    private void showPatchInfo() {
+        HotUpdateHelper helper = new HotUpdateHelper(this);
+        
+        if (helper.hasAppliedPatch()) {
+            PatchInfo info = helper.getAppliedPatchInfo();
+            
+            Log.i(TAG, "=== 补丁信息 ===");
+            Log.i(TAG, "补丁ID: " + info.getPatchId());
+            Log.i(TAG, "补丁版本: " + info.getPatchVersion());
+            Log.i(TAG, "应用时间: " + new java.util.Date(info.getCreateTime()));
+            Log.i(TAG, "===============");
+        }
     }
 }
 ```
 
 **AndroidManifest.xml：**
 ```xml
-<application
-    android:name=".MyApplication"
-    ...>
-</application>
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.example.myapp">
+    
+    <!-- 权限声明 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    
+    <application
+        android:name=".MyApplication"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.MyApp">
+        
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        
+    </application>
+    
+</manifest>
 ```
 
 ## Demo 应用使用

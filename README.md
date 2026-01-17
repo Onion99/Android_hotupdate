@@ -199,29 +199,45 @@ UpdateManager.getInstance().checkUpdate();
 
 **5. 在 Application 中集成**
 
+**方式一：使用 HotUpdateHelper（推荐 - 最简单）**
+
 ```java
 public class MyApplication extends Application {
     @Override
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
         
-        // 方式一：使用 HotUpdateHelper（推荐 - 最简单）
+        // 加载已应用的补丁（必须在 attachBaseContext 中调用）
         HotUpdateHelper helper = new HotUpdateHelper(this);
         helper.loadAppliedPatch();
-        
-        // 方式二：使用 PatchApplier
-        // PatchApplier patchApplier = new PatchApplier(this, new PatchStorage(this));
-        // patchApplier.loadAppliedPatch();
-        
-        // 方式三：使用 UpdateManager（服务器端更新流程）
-        // UpdateManager.getInstance().loadAppliedPatch();
-        
-        // 方式四：参考 demo 中的 RealHotUpdate 封装类
-        // RealHotUpdate hotUpdate = new RealHotUpdate(this);
-        // hotUpdate.loadAppliedPatch();
     }
 }
 ```
+
+**方式二：继承 PatchApplication（Demo 应用方式）**
+
+```java
+public class MyApplication extends PatchApplication {
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        // 你的其他初始化代码
+    }
+}
+```
+
+**AndroidManifest.xml 配置：**
+```xml
+<application
+    android:name=".MyApplication"
+    ...>
+</application>
+```
+
+> 📖 **详细配置说明**：
+> - [使用 HotUpdateHelper](docs/USAGE.md#方式一使用-hotupdatehelper推荐---最简单)
+> - [使用 PatchApplication](docs/USAGE.md#方式二直接继承-patchapplicationdemo-应用方式)
+> - [PatchApplication 完整源码](docs/USAGE.md#3-patchapplication-完整源码demo-实现)
 
 **6. 使用签名验证（可选，推荐生产环境使用）**
 
