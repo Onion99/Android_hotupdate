@@ -117,7 +117,29 @@ public class HotUpdateHelper {
                     callback.onProgress(20, "验证补丁文件...");
                 }
                 
-                // 3. 应用补丁（PatchApplier 会自动处理解密）
+                // 3. 读取补丁文件内容
+                byte[] patchData = readFileToBytes(patchFile);
+                if (patchData == null) {
+                    if (callback != null) {
+                        callback.onError("读取补丁文件失败");
+                    }
+                    return;
+                }
+                
+                // 4. 保存补丁文件到存储
+                boolean saved = storage.savePatchFile(patchInfo.getPatchId(), patchData);
+                if (!saved) {
+                    if (callback != null) {
+                        callback.onError("保存补丁文件失败");
+                    }
+                    return;
+                }
+                
+                if (callback != null) {
+                    callback.onProgress(40, "应用补丁...");
+                }
+                
+                // 5. 应用补丁（PatchApplier 会自动处理解密）
                 boolean success = applier.apply(patchInfo);
                 
                 if (success) {
@@ -130,7 +152,12 @@ public class HotUpdateHelper {
                     result.patchId = appliedPatch != null ? appliedPatch.getPatchId() : null;
                     result.patchVersion = appliedPatch != null ? appliedPatch.getPatchVersion() : null;
                     result.patchSize = patchFile.length();
-                    result.needsRestart = true; // 资源更新需要重启
+                    
+                    // 检查补丁内容类型
+                    result.dexInjected = DexPatcher.isSupported(); // DEX 热更新是否支持
+                    result.soLoaded = false; // SO 库加载状态（暂不支持检测）
+                    result.resourcesLoaded = hasResourcePatch(patchFile); // 检查是否包含资源
+                    result.needsRestart = result.resourcesLoaded; // 资源更新需要重启
                     
                     if (callback != null) {
                         callback.onProgress(100, "热更新完成！");
@@ -149,6 +176,63 @@ public class HotUpdateHelper {
                 }
             }
         });
+    }
+    
+    /**
+     * 读取文件内容到字节数组
+     */
+    private byte[] readFileToBytes(File file) {
+        try {
+            java.io.FileInputStream fis = new java.io.FileInputStream(file);
+            byte[] data = new byte[(int) file.length()];
+            fis.read(data);
+            fis.close();
+            return data;
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to read file", e);
+            return null;
+        }
+    }
+    
+    /**
+     * 检查补丁是否包含资源
+     */
+    private boolean hasResourcePatch(File patchFile) {
+        // 检查文件扩展名或内容
+        String fileName = patchFile.getName().toLowerCase(java.util.Locale.ROOT);
+        
+        // 如果是 APK 或 ZIP 文件，可能包含资源
+        if (fileName.endsWith(".apk") || fileName.endsWith(".zip")) {
+            return true;
+        }
+        
+        // 如果是纯 DEX 文件，不包含资源
+        if (fileName.endsWith(".dex")) {
+            return false;
+        }
+        
+        // 检查文件魔数
+        try {
+            byte[] header = new byte[4];
+            java.io.FileInputStream fis = new java.io.FileInputStream(patchFile);
+            fis.read(header);
+            fis.close();
+            
+            // ZIP/APK 魔数: PK (0x50 0x4B)
+            if (header[0] == 0x50 && header[1] == 0x4B) {
+                return true;
+            }
+            
+            // DEX 魔数: dex\n (0x64 0x65 0x78 0x0A)
+            if (header[0] == 0x64 && header[1] == 0x65 && 
+                header[2] == 0x78 && header[3] == 0x0A) {
+                return false;
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to check patch file type", e);
+        }
+        
+        return false;
     }
     
     /**

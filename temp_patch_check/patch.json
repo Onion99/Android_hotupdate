@@ -1,0 +1,31 @@
+{
+  "baseVersion": "1.0",
+  "baseVersionCode": 1,
+  "changes": {
+    "assets": {
+      "added": [],
+      "deleted": [],
+      "modified": []
+    },
+    "dex": {
+      "added": [],
+      "deleted": [],
+      "modified": []
+    },
+    "resources": {
+      "added": [],
+      "deleted": [],
+      "modified": [
+        "res/layout/activity_main.xml"
+      ]
+    }
+  },
+  "createTime": 1768675273451,
+  "fileSize": 0,
+  "md5": "00000000000000000000000000000000",
+  "patchId": "patch_1768675273451_9fd00e3e",
+  "patchMode": "full_dex",
+  "patchVersion": "1.0",
+  "targetVersion": "1.0",
+  "targetVersionCode": 1
+}

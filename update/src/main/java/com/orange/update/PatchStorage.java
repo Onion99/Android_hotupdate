@@ -56,7 +56,7 @@ public class PatchStorage {
 
     
     // 文件名常量
-    private static final String FILE_CURRENT_PATCH = "current_patch.dex";
+    private static final String FILE_CURRENT_PATCH = "current_patch.zip";
     private static final String FILE_NOMEDIA = ".nomedia";
     private static final String FILE_EXTENSION_ENC = ".enc";
     private static final String FILE_EXTENSION_DEX = ".dex";
