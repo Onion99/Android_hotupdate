@@ -1,3 +1,36 @@
-/build
+# Gradle files
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# Android Studio
+.idea/
+*.iml
+.DS_Store
+
+# NDK
+.cxx/
+.externalNativeBuild/
+
+# Kiro
 /.kiro/
+
+# Tinker dev
 /tinker-dev/
+
+# Generated files
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+
+# Log Files
+*.log
+
+# Signing files
+*.jks
+*.keystore
