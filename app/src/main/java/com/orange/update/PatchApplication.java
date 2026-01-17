@@ -27,7 +27,6 @@ public class PatchApplication extends Application {
     /**
      * 加载已应用的补丁
      * 
-     * 关键步骤（Tinker 的方式）：
      * 1. 检查是否有已应用的补丁
      * 2. 如果补丁包含资源，使用 ResourceMerger 合并原始 APK 和补丁资源
      * 3. 生成完整资源包到 merged_resources.apk

@@ -127,10 +127,27 @@ public class PatchApplier {
                 return false;
             }
             
-            // 4. 尝试加载资源补丁（如果存在）
+            // 4. 如果包含资源，进行资源合并（Tinker 的方式）
             try {
-                // 检查是否包含资源
                 if (hasResourcePatch(appliedPatchFile)) {
+                    Log.d(TAG, "Patch contains resources, merging with original APK");
+                    
+                    // 使用 ResourceMerger 合并资源
+                    File mergedResourceFile = new File(
+                        storage.getAppliedDir(), "merged_resources.apk");
+                    
+                    boolean merged = ResourceMerger.mergeResources(
+                        context, appliedPatchFile, mergedResourceFile);
+                    
+                    if (merged && mergedResourceFile.exists()) {
+                        Log.i(TAG, "Resources merged successfully, size: " + mergedResourceFile.length());
+                        // 使用合并后的完整资源包加载资源
+                        patchPath = mergedResourceFile.getAbsolutePath();
+                    } else {
+                        Log.w(TAG, "Failed to merge resources, using patch directly");
+                    }
+                    
+                    // 加载资源补丁（使用合并后的完整资源包）
                     ResourcePatcher.loadPatchResources(context, patchPath);
                     Log.d(TAG, "Resource patch loaded successfully");
                 }

@@ -139,10 +139,20 @@ public class HotUpdateHelper {
                     callback.onProgress(40, "应用补丁...");
                 }
                 
-                // 5. 应用补丁（PatchApplier 会自动处理解密）
+                // 5. 应用补丁（PatchApplier 会自动处理解密和资源合并）
+                // 检查是否包含资源，如果包含则显示资源合并进度
+                boolean hasResources = hasResourcePatch(patchFile);
+                if (hasResources && callback != null) {
+                    callback.onProgress(50, "合并资源文件...");
+                }
+                
                 boolean success = applier.apply(patchInfo);
                 
                 if (success) {
+                    if (hasResources && callback != null) {
+                        callback.onProgress(80, "资源合并完成");
+                    }
+                    
                     // 获取补丁信息
                     PatchInfo appliedPatch = storage.getAppliedPatchInfo();
                     
