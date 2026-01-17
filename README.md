@@ -47,10 +47,10 @@ dependencyResolutionManagement {
 ```groovy
 dependencies {
     // 补丁生成 SDK
-    implementation 'com.github.706412584.Android_hotupdate:patch-generator-android:1.2.0'
+    implementation 'com.github.706412584.Android_hotupdate:patch-generator-android:1.2.1'
     
     // 热更新 SDK
-    implementation 'com.github.706412584.Android_hotupdate:update:1.2.0'
+    implementation 'com.github.706412584.Android_hotupdate:update:1.2.1'
 }
 ```
 
@@ -190,6 +190,9 @@ if (intent != null) {
 
 ### Q: 如何回滚补丁？
 **A:** 调用 `hotUpdate.clearPatch()` 然后重启应用
+
+### Q: 支持加固的APK吗（360加固等）？
+**A:** 部分支持，建议在加固前生成补丁，加固后充分测试。详见 [常见问题 - 加固相关](docs/FAQ.md#加固相关)
 
 更多问题请查看 [常见问题文档](docs/FAQ.md)
 

@@ -64,7 +64,7 @@ patch.zip
 ```json
 {
   "version": "1.0",
-  "patchVersion": "1.2.0",
+  "patchVersion": "1.2.1",
   "baseVersion": "1.0.0",
   "packageName": "com.example.app",
   "timestamp": 1705478400000,
