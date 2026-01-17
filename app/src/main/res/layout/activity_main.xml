@@ -235,6 +235,56 @@
 
             </LinearLayout>
 
+            <!-- 签名验证演示卡片 -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/card_background"
+                android:orientation="vertical"
+                android:padding="16dp"
+                android:layout_marginBottom="12dp"
+                android:elevation="2dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🔒 签名验证演示"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:textColor="@color/text_primary"
+                    android:layout_marginBottom="12dp"/>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="演示如何使用签名验证保护补丁安全"
+                    android:textSize="12sp"
+                    android:textColor="@color/text_secondary"
+                    android:layout_marginBottom="12dp"/>
+
+                <Button
+                    android:id="@+id/btn_verify_success"
+                    style="@style/Widget.AppCompat.Button.Borderless"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:text="✓ 验证成功示例"
+                    android:textSize="14sp"
+                    android:textColor="@color/btn_text_color_selector"
+                    android:background="@drawable/btn_primary_bg"
+                    android:layout_marginBottom="8dp"/>
+
+                <Button
+                    android:id="@+id/btn_verify_fail"
+                    style="@style/Widget.AppCompat.Button.Borderless"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:text="✗ 验证失败示例（补丁被篡改）"
+                    android:textSize="14sp"
+                    android:textColor="@color/btn_text_color_selector"
+                    android:background="@drawable/btn_accent_bg"/>
+
+            </LinearLayout>
+
             <!-- 信息显示卡片 -->
             <LinearLayout
                 android:layout_width="match_parent"
