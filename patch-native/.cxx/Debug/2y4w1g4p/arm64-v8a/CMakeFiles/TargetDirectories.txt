@@ -1,3 +1,0 @@
-D:/android/projecet_iade/androidhotupdate/patch-native/.cxx/Debug/2y4w1g4p/arm64-v8a/CMakeFiles/patchengine.dir
-D:/android/projecet_iade/androidhotupdate/patch-native/.cxx/Debug/2y4w1g4p/arm64-v8a/CMakeFiles/edit_cache.dir
-D:/android/projecet_iade/androidhotupdate/patch-native/.cxx/Debug/2y4w1g4p/arm64-v8a/CMakeFiles/rebuild_cache.dir
