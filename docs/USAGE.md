@@ -293,6 +293,13 @@ hotUpdate.applyPatch(encryptedPatch, new RealHotUpdate.ApplyCallback() {
 });
 ```
 
+**密码验证流程：**
+1. 检测到 `.enc` 文件后，会**自动弹出密码输入对话框**
+2. 如果生成时使用了自定义密码，用户需要输入相同密码
+3. 如果生成时未设置密码（使用 KeyStore），可以留空直接解密
+4. 密码错误会导致解密失败，显示错误提示
+5. 整个过程由 `RealHotUpdate` 自动处理，无需手动调用解密方法
+
 **手动解密（可选）：**
 
 ```java

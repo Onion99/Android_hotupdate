@@ -158,12 +158,17 @@ if (securityManager.verifySignature(patchFile, patchSignature)) {
 SecurityManager securityManager = new SecurityManager(context);
 File patchFile = new File("/path/to/patch.zip");
 
-// 使用 AES-256-GCM 加密
+// 方式 1: 使用 AES-256-GCM 加密（KeyStore）
 File encryptedPatch = securityManager.encryptPatch(patchFile);
 // 生成加密文件: patch.zip.enc
 
+// 方式 2: 使用密码加密
+String password = "your_secure_password";
+File encryptedPatch = securityManager.encryptPatchWithPassword(patchFile, password);
+// 生成加密文件: patch.zip.enc
+
 // 步骤 2: 客户端自动解密并应用
-// 客户端会自动检测 .enc 扩展名并解密
+// 客户端会自动检测 .enc 扩展名并弹出密码输入对话框
 RealHotUpdate hotUpdate = new RealHotUpdate(context);
 hotUpdate.applyPatch(encryptedPatch, new RealHotUpdate.ApplyCallback() {
     @Override
@@ -176,6 +181,10 @@ hotUpdate.applyPatch(encryptedPatch, new RealHotUpdate.ApplyCallback() {
         Log.e(TAG, "解密或应用失败: " + message);
     }
 });
+// 注意：
+// - 如果使用了密码加密，会自动弹出密码输入对话框
+// - 用户需要输入正确的密码才能解密
+// - 如果使用 KeyStore 加密，可以留空直接解密
 
 // 步骤 3: 手动解密（可选）
 try {
