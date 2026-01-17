@@ -3,6 +3,10 @@ plugins {
     id 'maven-publish'
 }
 
+// 检测是否在JitPack环境中构建
+def isJitPackBuild = System.getenv("JITPACK") == "true" || 
+                     gradle.startParameter.taskNames.toString().contains("publishToMavenLocal")
+
 android {
     namespace 'com.orange.patchnative'
     compileSdk 36
@@ -15,7 +19,7 @@ android {
         consumerProguardFiles "consumer-rules.pro"
 
         // 只在非JitPack环境编译Native代码
-        if (System.getenv("JITPACK") != "true") {
+        if (!isJitPackBuild) {
             externalNativeBuild {
                 cmake {
                     cppFlags "-std=c++17 -fexceptions"
@@ -40,7 +44,7 @@ android {
     }
 
     // 只在非JitPack环境配置Native编译
-    if (System.getenv("JITPACK") != "true") {
+    if (!isJitPackBuild) {
         externalNativeBuild {
             cmake {
                 path "src/main/cpp/CMakeLists.txt"
@@ -52,7 +56,7 @@ android {
     // 在JitPack环境使用预编译的SO库
     sourceSets {
         main {
-            if (System.getenv("JITPACK") == "true") {
+            if (isJitPackBuild) {
                 jniLibs.srcDirs = ['prebuilt/jniLibs']
             }
         }
