@@ -186,10 +186,70 @@ File encryptedPatch = securityManager.encryptPatch(patchFile);
 
 ### Q: 加密补丁需要密码吗？
 **A:** 
-- 默认使用 Android KeyStore，无需密码
-- KeyStore 密钥与设备绑定，自动管理
-- 可选支持自定义密码（需要额外实现）
-- 推荐使用 KeyStore 方案（更安全）
+- 支持两种加密方式：
+  1. **Android KeyStore**（默认）：无需密码，密钥与设备绑定
+  2. **密码加密**：使用自定义密码，客户端需要相同密码才能解密
+- 推荐使用 KeyStore 方案（更安全，无需管理密码）
+- 密码加密适合需要跨设备使用的场景
+
+### Q: 如何使用密码加密补丁？
+**A:** 使用 `encryptPatchWithPassword` 方法：
+```java
+SecurityManager securityManager = new SecurityManager(context);
+String password = "your_secure_password";
+File encryptedPatch = securityManager.encryptPatchWithPassword(patchFile, password);
+```
+- 客户端应用时会自动提示输入密码
+- 密码错误会导致解密失败
+- 建议使用强密码（至少 8 位，包含字母数字）
+
+### Q: 密码加密和 KeyStore 加密有什么区别？
+**A:**
+- **KeyStore 加密**：
+  - 密钥存储在 Android KeyStore
+  - 密钥与设备绑定，无法导出
+  - 无需管理密码
+  - 更安全，但不能跨设备使用
+  
+- **密码加密**：
+  - 使用 PBKDF2 从密码派生密钥
+  - 可以跨设备使用
+  - 需要管理和保护密码
+  - 密码强度影响安全性
+
+### Q: 如何配置安全策略？
+**A:** 使用 SharedPreferences 配置：
+```java
+SharedPreferences securityPrefs = context.getSharedPreferences("security_policy", MODE_PRIVATE);
+securityPrefs.edit()
+    .putBoolean("require_signature", true)  // 强制签名
+    .putBoolean("require_encryption", true) // 强制加密
+    .apply();
+```
+- 开启后，只能应用符合策略的补丁
+- 不符合策略的补丁会被拒绝
+- Demo 应用提供了可视化配置界面
+
+### Q: 安全策略在什么时候检查？
+**A:** 在应用补丁时自动检查：
+- 检查时机：调用 `applyPatch()` 时
+- 检查内容：
+  - 如果要求签名，检查是否有 `.sig` 文件
+  - 如果要求加密，检查文件是否以 `.enc` 结尾
+- 不符合策略会立即拒绝，并显示详细错误信息
+- 适合在生产环境中强制执行安全规范
+
+### Q: 签名验证在什么时候进行？
+**A:** 自动检测并验证：
+- 如果补丁文件旁边有 `.sig` 签名文件，会自动验证
+- 验证流程：
+  1. 检测到 `.sig` 文件
+  2. 读取签名内容
+  3. 使用公钥验证签名
+  4. 验证通过后继续应用补丁
+  5. 验证失败则拒绝应用
+- 无需手动调用验证方法
+- Demo 应用会显示验证过程和结果
 
 ### Q: 加密补丁可以在不同设备上使用吗？
 **A:**
@@ -198,18 +258,20 @@ File encryptedPatch = securityManager.encryptPatch(patchFile);
 - 推荐方案：
   - 服务器端不加密，只签名
   - 客户端下载后本地加密存储
-  - 或使用对称密钥（打包在 APK 中）
+  - 或使用密码加密（可跨设备）
 
 ### Q: 解密失败怎么办？
 **A:** 常见原因：
-1. Android 版本低于 6.0
+1. Android 版本低于 6.0（KeyStore 加密）
 2. KeyStore 密钥丢失（设备重置）
-3. 补丁文件损坏
-4. 加密算法不匹配
+3. 密码错误（密码加密）
+4. 补丁文件损坏
+5. 加密算法不匹配
 
 解决方法：
 - 检查 Android 版本
 - 重新下载补丁
+- 确认密码正确
 - 使用未加密的补丁
 - 查看 Logcat 日志
 

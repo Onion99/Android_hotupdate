@@ -149,8 +149,11 @@ SecurityManager securityManager = new SecurityManager(context);
 // 1. 生成补丁
 File patchFile = generatePatch(baseApk, newApk);
 
-// 2. 加密补丁
-File encryptedPatch = securityManager.encryptPatch(patchFile);
+// 2. 加密补丁（可选使用密码）
+String password = "your_secure_password"; // 或留空使用 KeyStore
+File encryptedPatch = password.isEmpty() 
+    ? securityManager.encryptPatch(patchFile)
+    : securityManager.encryptPatchWithPassword(patchFile, password);
 
 // 3. 对加密文件签名
 String signature = signFile(encryptedPatch, privateKey);
@@ -167,19 +170,63 @@ if (!securityManager.verifySignature(encryptedPatch, signature)) {
     return;
 }
 
-// 3. 应用补丁（自动解密）
+// 3. 应用补丁（自动解密，如果使用密码会提示输入）
 RealHotUpdate hotUpdate = new RealHotUpdate(context);
 hotUpdate.applyPatch(encryptedPatch, callback);
 ```
 
+### 7. 使用密码加密补丁
+
+支持使用自定义密码加密补丁：
+
+```java
+// 生成时使用密码加密
+SecurityManager securityManager = new SecurityManager(context);
+File patchFile = new File("/path/to/patch.zip");
+String password = "your_secure_password";
+
+// 使用密码加密
+File encryptedPatch = securityManager.encryptPatchWithPassword(patchFile, password);
+Log.i(TAG, "补丁已加密: " + encryptedPatch.getPath());
+
+// 客户端应用时会自动检测 .enc 文件并提示输入密码
+RealHotUpdate hotUpdate = new RealHotUpdate(context);
+hotUpdate.applyPatch(encryptedPatch, new RealHotUpdate.ApplyCallback() {
+    @Override
+    public void onProgress(int percent, String message) {
+        // 会显示 "正在解密补丁..." 等状态
+        Log.d(TAG, message + ": " + percent + "%");
+    }
+    
+    @Override
+    public void onSuccess(RealHotUpdate.PatchResult result) {
+        Log.i(TAG, "补丁解密并应用成功！");
+    }
+    
+    @Override
+    public void onError(String message) {
+        Log.e(TAG, "解密或应用失败: " + message);
+    }
+});
+```
+
+**密码加密特性：**
+- 算法：PBKDF2WithHmacSHA256 + AES-256-GCM
+- 迭代次数：10000 次
+- 密钥派生：从密码派生 256 位密钥
+- 客户端需要相同密码才能解密
+- 支持密码提示文件（.pwd）
+
 **安全级别对比：**
 
-| 方案 | 防篡改 | 防窃取 | 推荐场景 |
-|------|--------|--------|----------|
-| 无保护 | ❌ | ❌ | 开发测试 |
-| 仅签名 | ✅ | ❌ | 一般应用 |
-| 仅加密 | ❌ | ✅ | 内容保护 |
-| 签名+加密 | ✅ | ✅ | 生产环境（推荐） |
+| 方案 | 防篡改 | 防窃取 | 密码保护 | 推荐场景 |
+|------|--------|--------|----------|----------|
+| 无保护 | ❌ | ❌ | ❌ | 开发测试 |
+| 仅签名 | ✅ | ❌ | ❌ | 一般应用 |
+| 仅加密（KeyStore） | ❌ | ✅ | ❌ | 内容保护 |
+| 仅加密（密码） | ❌ | ✅ | ✅ | 需要密码保护 |
+| 签名+加密（KeyStore） | ✅ | ✅ | ❌ | 生产环境 |
+| 签名+加密（密码） | ✅ | ✅ | ✅ | 最高安全级别 |
 
 ## 补丁应用流程
 
@@ -336,6 +383,42 @@ if (intent != null) {
 }
 ```
 
+### 6. 配置安全策略（可选）
+
+可以配置安全策略，强制要求补丁签名或加密：
+
+```java
+// 配置安全策略
+SharedPreferences securityPrefs = context.getSharedPreferences("security_policy", MODE_PRIVATE);
+securityPrefs.edit()
+    .putBoolean("require_signature", true)  // 强制要求签名
+    .putBoolean("require_encryption", true) // 强制要求加密
+    .apply();
+
+// 应用补丁时会自动检查安全策略
+RealHotUpdate hotUpdate = new RealHotUpdate(context);
+hotUpdate.applyPatch(patchFile, new RealHotUpdate.ApplyCallback() {
+    @Override
+    public void onSuccess(RealHotUpdate.PatchResult result) {
+        Log.i(TAG, "补丁应用成功");
+    }
+    
+    @Override
+    public void onError(String message) {
+        // 如果补丁不符合安全策略，会返回错误
+        // 例如："当前安全策略要求补丁必须签名"
+        Log.e(TAG, "应用失败: " + message);
+    }
+});
+```
+
+**安全策略说明：**
+- `require_signature`: 开启后只能应用已签名的补丁
+- `require_encryption`: 开启后只能应用已加密的补丁
+- 如果补丁不符合策略要求，会拒绝应用并显示详细错误信息
+- 适合在生产环境中强制执行安全规范
+- Demo 应用提供了可视化的安全策略配置界面
+
 ## 热更新原理
 
 ### DEX 热更新
@@ -440,21 +523,26 @@ public class MyApplication extends Application {
    - 密钥自动保存到 `/sdcard/Download/`
    - 显示公钥和私钥信息
 
-2. **测试签名验证成功**
+2. **加载已有密钥**
+   - 点击「🔑 加载密钥」按钮
+   - 自动从下载目录加载密钥文件
+   - 支持手动编辑密钥文件
+
+3. **配置自定义密钥**
+   - 点击「⚙️ 配置密钥」按钮
+   - 输入自己的公钥和私钥（Base64 格式）
+   - 或点击「加载现有密钥」自动填充
+   - 点击「保存」验证并保存密钥
+
+4. **测试签名验证成功**
    - 点击「✅ 验证成功」按钮
    - 使用真实的 RSA 签名算法
    - 显示签名和验证结果
 
-3. **测试签名验证失败**
+5. **测试签名验证失败**
    - 点击「❌ 验证失败」按钮
    - 模拟补丁被篡改的情况
    - 显示验证失败信息
-
-4. **配置自定义密钥**
-   - 点击「⚙️ 配置密钥」按钮
-   - 输入自己的公钥和私钥
-   - 或点击「加载现有密钥」自动填充
-   - 点击「保存」验证并保存密钥
 
 #### 测试加密和签名
 
@@ -462,8 +550,9 @@ public class MyApplication extends Application {
    - 选择基准 APK 和新 APK
    - 点击「生成补丁」
    - 在弹出的对话框中选择：
-     - ✅ 🔒 签名补丁（防止篡改）
-     - ✅ 🔐 加密补丁（保护内容）
+     - ✅ 🔒 对补丁进行签名（防止篡改）
+     - ✅ 🔐 对补丁进行加密（保护内容）
+     - 可选输入加密密码（留空使用默认密钥）
    - 点击「生成」
 
 2. **查看生成的文件**
@@ -471,13 +560,37 @@ public class MyApplication extends Application {
    - 仅签名：`patch_[timestamp].zip` + `.sig`
    - 仅加密：`patch_[timestamp].zip.enc`
    - 签名+加密：`patch_[timestamp].zip.enc` + `.enc.sig`
+   - 密码加密：额外生成 `.pwd` 密码提示文件
 
 3. **应用加密补丁**
    - 点击「应用补丁」
    - 自动检测 `.enc` 扩展名
-   - 显示「正在解密补丁...」
+   - 如果使用了密码加密，会弹出密码输入对话框
+   - 输入正确密码后自动解密
+   - 显示「正在解密补丁...」进度
    - 解密成功后自动应用
    - 显示应用结果
+
+4. **应用签名补丁**
+   - 点击「应用补丁」
+   - 自动检测 `.sig` 签名文件
+   - 显示「正在验证补丁签名...」
+   - 验证通过后继续应用
+   - 验证失败则拒绝应用并显示详细错误
+
+5. **配置安全策略**
+   - 点击「🛡️ 安全策略设置」按钮
+   - 配置以下选项：
+     - 🔒 强制要求补丁签名
+     - 🔐 强制要求补丁加密
+   - 点击「保存」
+   - 设置立即生效
+
+6. **测试安全策略**
+   - 开启「强制要求签名」后
+   - 尝试应用未签名的补丁
+   - 会显示拒绝提示和原因
+   - 可以点击「安全设置」快速修改策略
 
 #### 测试 DEX 和资源热更新
 

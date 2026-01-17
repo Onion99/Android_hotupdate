@@ -197,8 +197,8 @@ SecurityManager securityManager = new SecurityManager(context);
 // 1. 生成补丁
 File patchFile = generatePatch(baseApk, newApk);
 
-// 2. 加密补丁
-File encryptedPatch = securityManager.encryptPatch(patchFile);
+// 2. 加密补丁（可选使用密码）
+File encryptedPatch = securityManager.encryptPatchWithPassword(patchFile, "password");
 
 // 3. 对加密后的补丁签名
 String signature = signPatchFile(encryptedPatch, privateKey);
@@ -217,9 +217,30 @@ if (!securityManager.verifySignature(encryptedPatch, signature)) {
     return;
 }
 
-// 2. 自动解密并应用（RealHotUpdate 会自动处理 .enc 文件）
+// 2. 自动解密并应用（会提示输入密码）
 RealHotUpdate hotUpdate = new RealHotUpdate(context);
 hotUpdate.applyPatch(encryptedPatch, callback);
+```
+
+**9. 配置安全策略（Demo 应用功能）**
+
+Demo 应用支持配置安全策略，强制要求补丁签名或加密：
+
+```java
+// 在 Demo 应用中点击「🛡️ 安全策略设置」按钮
+// 可以配置以下选项：
+// - 🔒 强制要求补丁签名：开启后只能应用已签名的补丁
+// - 🔐 强制要求补丁加密：开启后只能应用已加密的补丁
+
+// 在代码中使用 SharedPreferences 配置
+SharedPreferences securityPrefs = context.getSharedPreferences("security_policy", MODE_PRIVATE);
+securityPrefs.edit()
+    .putBoolean("require_signature", true)  // 强制签名
+    .putBoolean("require_encryption", true) // 强制加密
+    .apply();
+
+// 应用补丁时会自动检查安全策略
+// 如果补丁不符合策略要求，会拒绝应用并显示提示
 ```
 
 **完整的签名验证流程示例：**
@@ -271,8 +292,10 @@ UpdateManager.getInstance().checkUpdate();
 - 📱 **公钥可以打包到 APK 中**，用于客户端验证
 - 🐛 **调试模式下可以跳过签名验证**，方便开发测试
 - ✅ **签名算法使用 SHA256withRSA**，安全可靠
-- 🔐 **敏感内容建议启用加密**，使用 AES-256-GCM
+- 🔐 **敏感内容建议启用加密**，使用 AES-256-GCM 或密码加密
 - 🛡️ **推荐同时使用签名和加密**，提供最高安全级别
+- 🔑 **密码加密支持自定义密码**，客户端需要相同密码才能解密
+- ⚙️ **Demo 应用支持安全策略配置**，可强制要求签名或加密
 
 ## 🛡️ 安全最佳实践
 
@@ -292,8 +315,9 @@ UpdateManager.getInstance().checkUpdate();
 ### 密钥管理
 - 🔑 **私钥**: 只在服务器端使用，严格保密
 - 🔓 **公钥**: 打包在 APK 中，用于验证
-- 🔐 **加密密钥**: 使用 Android KeyStore，设备绑定
+- 🔐 **加密密钥**: 使用 Android KeyStore（设备绑定）或自定义密码
 - 🔄 **密钥轮换**: 定期更新密钥对
+- 🔑 **密码管理**: 密码加密时，客户端需要相同密码才能解密
 
 ### 补丁分发
 - 📡 **HTTPS**: 必须使用 HTTPS 传输
