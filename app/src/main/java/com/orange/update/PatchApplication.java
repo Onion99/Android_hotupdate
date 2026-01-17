@@ -2,10 +2,7 @@ package com.orange.update;
 
 import android.app.Application;
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.util.Log;
-
-import java.io.File;
 
 /**
  * 热更新 Application
@@ -18,9 +15,6 @@ import java.io.File;
 public class PatchApplication extends Application {
     
     private static final String TAG = "PatchApplication";
-    private static final String PREFS_NAME = "real_hot_update_prefs";
-    private static final String KEY_PATCH_APPLIED = "patch_applied";
-    private static final String KEY_PATCH_FILE = "patch_file";
     
     @Override
     protected void attachBaseContext(Context base) {
@@ -32,42 +26,74 @@ public class PatchApplication extends Application {
     
     /**
      * 加载已应用的补丁
+     * 
+     * 关键步骤（Tinker 的方式）：
+     * 1. 检查是否有已应用的补丁
+     * 2. 如果补丁包含资源，使用 ResourceMerger 合并原始 APK 和补丁资源
+     * 3. 生成完整资源包到 merged_resources.apk
+     * 4. 加载完整资源包（而不是直接使用补丁）
+     * 5. 加载 DEX 补丁
      */
     private void loadPatchIfNeeded() {
         try {
-            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            // 注意：在 attachBaseContext 中不能使用 getApplicationContext()
+            // 因为 Application 还没有完全初始化，需要手动创建 SharedPreferences
+            android.content.SharedPreferences prefs = getSharedPreferences("patch_storage_prefs", Context.MODE_PRIVATE);
+            String appliedPatchId = prefs.getString("applied_patch_id", null);
             
-            if (!prefs.getBoolean(KEY_PATCH_APPLIED, false)) {
-                Log.d(TAG, "No patch applied, skip loading");
+            if (appliedPatchId == null || appliedPatchId.isEmpty()) {
+                Log.d(TAG, "No applied patch to load");
                 return;
             }
             
-            String patchPath = prefs.getString(KEY_PATCH_FILE, null);
-            if (patchPath == null) {
-                Log.w(TAG, "Patch file path not found");
+            Log.d(TAG, "Loading applied patch: " + appliedPatchId);
+            
+            // 获取已应用的补丁文件
+            java.io.File updateDir = new java.io.File(getFilesDir(), "update");
+            java.io.File appliedDir = new java.io.File(updateDir, "applied");
+            java.io.File appliedFile = new java.io.File(appliedDir, "current_patch.zip");
+            
+            if (!appliedFile.exists()) {
+                Log.w(TAG, "Applied patch file not found: " + appliedFile.getAbsolutePath());
                 return;
             }
             
-            File patchFile = new File(patchPath);
-            if (!patchFile.exists()) {
-                Log.w(TAG, "Patch file not found: " + patchPath);
-                // 清除无效的补丁记录
-                prefs.edit().putBoolean(KEY_PATCH_APPLIED, false).apply();
-                return;
+            String patchPath = appliedFile.getAbsolutePath();
+            
+            // 检查补丁是否包含资源
+            if (hasResourcePatch(appliedFile)) {
+                Log.d(TAG, "Patch contains resources, merging with original APK");
+                
+                // 使用 ResourceMerger 合并资源（Tinker 的方式）
+                java.io.File mergedResourceFile = new java.io.File(appliedDir, "merged_resources.apk");
+                
+                boolean merged = ResourceMerger.mergeResources(
+                    this, appliedFile, mergedResourceFile);
+                
+                if (merged && mergedResourceFile.exists()) {
+                    Log.i(TAG, "Resources merged successfully, size: " + mergedResourceFile.length());
+                    // 使用合并后的完整资源包
+                    patchPath = mergedResourceFile.getAbsolutePath();
+                } else {
+                    Log.w(TAG, "Failed to merge resources, using patch directly");
+                }
             }
             
-            Log.i(TAG, "Loading patch from: " + patchPath);
+            // 注入 DEX 补丁
+            if (!DexPatcher.isPatchInjected(this, patchPath)) {
+                DexPatcher.injectPatchDex(this, patchPath);
+                Log.d(TAG, "Dex patch loaded successfully");
+            }
             
-            // 1. 加载 DEX 补丁
-            loadDexPatch(patchFile);
+            // 加载资源补丁（使用合并后的完整资源包）
+            try {
+                ResourcePatcher.loadPatchResources(this, patchPath);
+                Log.d(TAG, "Resource patch loaded successfully");
+            } catch (ResourcePatcher.PatchResourceException e) {
+                Log.w(TAG, "Failed to load resource patch", e);
+            }
             
-            // 2. 加载 SO 库补丁
-            loadSoPatch(patchFile);
-            
-            // 3. 加载资源补丁
-            loadResourcePatch(patchFile);
-            
-            Log.i(TAG, "Patch loaded successfully in attachBaseContext");
+            Log.i(TAG, "Patch loading completed in attachBaseContext");
             
         } catch (Exception e) {
             Log.e(TAG, "Failed to load patch in attachBaseContext", e);
@@ -75,154 +101,42 @@ public class PatchApplication extends Application {
     }
     
     /**
-     * 加载 DEX 补丁
+     * 检查补丁是否包含资源
      */
-    private void loadDexPatch(File patchFile) {
-        try {
-            // 检查是否支持
-            if (!DexPatcher.isSupported()) {
-                Log.w(TAG, "DEX patching not supported on this device");
-                return;
-            }
-            
-            // 提取 DEX 文件
-            File dexDir = new File(getFilesDir(), "hotupdate/dex");
-            if (!dexDir.exists()) dexDir.mkdirs();
-            
-            File extractedDex = extractDexFromPatch(patchFile, dexDir);
-            if (extractedDex != null && extractedDex.exists()) {
-                DexPatcher.injectPatchDex(this, extractedDex.getAbsolutePath());
-                Log.i(TAG, "DEX patch injected in attachBaseContext");
-            } else {
-                Log.d(TAG, "No DEX file in patch");
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to load DEX patch", e);
-        }
-    }
-    
-    /**
-     * 加载 SO 库补丁
-     */
-    private void loadSoPatch(File patchFile) {
-        try {
-            // 检查是否支持
-            if (!SoPatcher.isSupported()) {
-                Log.w(TAG, "SO patching not supported on this device");
-                return;
-            }
-            
-            // 加载 SO 库
-            SoPatcher.loadPatchLibraries(this, patchFile);
-            Log.i(TAG, "SO libraries loaded in attachBaseContext");
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to load SO patch", e);
-        }
-    }
-    
-    /**
-     * 加载资源补丁
-     * 使用 ResourceMerger 合并原始 APK 和补丁资源，生成完整资源包后加载
-     */
-    private void loadResourcePatch(File patchFile) {
-        try {
-            // 检查是否支持
-            if (!ResourcePatcher.isSupported()) {
-                Log.w(TAG, "Resource patching not supported on this device");
-                return;
-            }
-            
-            // 检查补丁包是否包含资源
-            if (!hasResources(patchFile)) {
-                Log.d(TAG, "No resources in patch");
-                return;
-            }
-            
-            // 优先使用已合并的资源文件（如果存在）
-            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
-            String mergedResourcePath = prefs.getString("merged_resource_file", null);
-            
-            File mergedResourceFile = null;
-            if (mergedResourcePath != null) {
-                mergedResourceFile = new File(mergedResourcePath);
-            }
-            
-            // 如果合并文件不存在，重新合并
-            if (mergedResourceFile == null || !mergedResourceFile.exists()) {
-                Log.d(TAG, "Merged resource file not found, creating...");
-                
-                File mergedResourceDir = new File(getFilesDir(), "hotupdate/merged");
-                if (!mergedResourceDir.exists()) mergedResourceDir.mkdirs();
-                mergedResourceFile = new File(mergedResourceDir, "merged_resources.apk");
-                
-                // 合并原始 APK 和补丁资源
-                boolean mergeSuccess = ResourceMerger.mergeResources(this, patchFile, mergedResourceFile);
-                
-                if (!mergeSuccess || !mergedResourceFile.exists()) {
-                    Log.e(TAG, "Failed to merge resources");
-                    return;
-                }
-                
-                // 保存合并资源文件路径
-                prefs.edit().putString("merged_resource_file", mergedResourceFile.getAbsolutePath()).apply();
-            }
-            
-            // 加载合并后的完整资源包
-            Log.d(TAG, "Loading merged resources from: " + mergedResourceFile.getAbsolutePath());
-            ResourcePatcher.loadPatchResources(this, mergedResourceFile.getAbsolutePath());
-            Log.i(TAG, "Merged resource patch loaded in attachBaseContext");
-            
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to load resource patch", e);
-        }
-    }
-    
-    /**
-     * 从补丁包提取 DEX 文件
-     */
-    private File extractDexFromPatch(File patchFile, File outputDir) {
-        File outputDex = new File(outputDir, "patch.dex");
+    private boolean hasResourcePatch(java.io.File patchFile) {
+        String fileName = patchFile.getName().toLowerCase(java.util.Locale.ROOT);
         
-        try (java.util.zip.ZipInputStream zis = new java.util.zip.ZipInputStream(
-                new java.io.FileInputStream(patchFile))) {
-            java.util.zip.ZipEntry entry;
-            while ((entry = zis.getNextEntry()) != null) {
-                String name = entry.getName();
-                if (name.endsWith(".dex") || name.equals("classes.dex")) {
-                    try (java.io.FileOutputStream fos = new java.io.FileOutputStream(outputDex)) {
-                        byte[] buffer = new byte[8192];
-                        int len;
-                        while ((len = zis.read(buffer)) > 0) {
-                            fos.write(buffer, 0, len);
-                        }
-                    }
-                    return outputDex;
-                }
-                zis.closeEntry();
+        // 如果是 APK 或 ZIP 文件，可能包含资源
+        if (fileName.endsWith(".apk") || fileName.endsWith(".zip")) {
+            return true;
+        }
+        
+        // 如果是纯 DEX 文件，不包含资源
+        if (fileName.endsWith(".dex")) {
+            return false;
+        }
+        
+        // 检查文件魔数
+        try {
+            byte[] header = new byte[4];
+            java.io.FileInputStream fis = new java.io.FileInputStream(patchFile);
+            fis.read(header);
+            fis.close();
+            
+            // ZIP/APK 魔数: PK (0x50 0x4B)
+            if (header[0] == 0x50 && header[1] == 0x4B) {
+                return true;
+            }
+            
+            // DEX 魔数: dex\n (0x64 0x65 0x78 0x0A)
+            if (header[0] == 0x64 && header[1] == 0x65 && 
+                header[2] == 0x78 && header[3] == 0x0A) {
+                return false;
             }
         } catch (Exception e) {
-            Log.e(TAG, "Failed to extract DEX", e);
+            Log.w(TAG, "Failed to check patch file type", e);
         }
-        return null;
-    }
-    
-    /**
-     * 检查补丁包是否包含资源
-     */
-    private boolean hasResources(File patchFile) {
-        try (java.util.zip.ZipInputStream zis = new java.util.zip.ZipInputStream(
-                new java.io.FileInputStream(patchFile))) {
-            java.util.zip.ZipEntry entry;
-            while ((entry = zis.getNextEntry()) != null) {
-                String name = entry.getName();
-                if (name.equals("resources.arsc") || name.startsWith("res/")) {
-                    return true;
-                }
-                zis.closeEntry();
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to check resources", e);
-        }
+        
         return false;
     }
 }
