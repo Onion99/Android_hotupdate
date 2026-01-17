@@ -621,6 +621,19 @@ public class MainActivity extends AppCompatActivity {
         tvSignHint.setPadding(0, 0, 0, 15);
         layout.addView(tvSignHint);
         
+        // ZIP 密码选项
+        android.widget.CheckBox cbZipPassword = new android.widget.CheckBox(this);
+        cbZipPassword.setText("🔑 ZIP 密码保护");
+        cbZipPassword.setChecked(false);
+        layout.addView(cbZipPassword);
+        
+        TextView tvZipPasswordHint = new TextView(this);
+        tvZipPasswordHint.setText("  使用 AES-256 ZIP 密码加密，防篡改");
+        tvZipPasswordHint.setTextSize(12);
+        tvZipPasswordHint.setTextColor(0xFF666666);
+        tvZipPasswordHint.setPadding(0, 0, 0, 15);
+        layout.addView(tvZipPasswordHint);
+        
         // 加密选项
         android.widget.CheckBox cbEncrypt = new android.widget.CheckBox(this);
         cbEncrypt.setText("🔐 对补丁进行加密");
@@ -669,6 +682,7 @@ public class MainActivity extends AppCompatActivity {
             .setView(layout)
             .setPositiveButton("生成", (d, w) -> {
                 boolean withSignature = cbSign.isChecked();
+                boolean withZipPassword = cbZipPassword.isChecked();
                 boolean withEncryption = cbEncrypt.isChecked();
                 String password = etPassword.getText().toString().trim();
                 
@@ -678,7 +692,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 
                 // 生成补丁
-                generatePatchWithOptions(withSignature, withEncryption, password);
+                generatePatchWithOptions(withSignature, withZipPassword, withEncryption, password);
             })
             .setNegativeButton("取消", null);
         
@@ -692,9 +706,9 @@ public class MainActivity extends AppCompatActivity {
     }
     
     /**
-     * 生成补丁（可选签名和加密）
+     * 生成补丁（可选签名、ZIP密码和加密）
      */
-    private void generatePatchWithOptions(boolean withSignature, boolean withEncryption, String password) {
+    private void generatePatchWithOptions(boolean withSignature, boolean withZipPassword, boolean withEncryption, String password) {
         // 输出到下载目录
         File outputFile = new File(outputDir, "patch_" + System.currentTimeMillis() + ".zip");
 
@@ -706,13 +720,22 @@ public class MainActivity extends AppCompatActivity {
         Log.d(TAG, "新版 APK 大小: " + formatSize(selectedNewApk.length()));
         Log.d(TAG, "输出文件: " + outputFile.getAbsolutePath());
         Log.d(TAG, "签名: " + withSignature);
+        Log.d(TAG, "ZIP密码: " + withZipPassword);
         Log.d(TAG, "加密: " + withEncryption);
 
         String status = "正在生成补丁...";
-        if (withSignature && withEncryption) {
+        if (withSignature && withZipPassword && withEncryption) {
+            status = "正在生成、签名、ZIP密码并加密补丁...";
+        } else if (withSignature && withZipPassword) {
+            status = "正在生成、签名并添加ZIP密码...";
+        } else if (withSignature && withEncryption) {
             status = "正在生成、签名并加密补丁...";
+        } else if (withZipPassword && withEncryption) {
+            status = "正在生成、ZIP密码并加密补丁...";
         } else if (withSignature) {
             status = "正在生成并签名补丁...";
+        } else if (withZipPassword) {
+            status = "正在生成并添加ZIP密码...";
         } else if (withEncryption) {
             status = "正在生成并加密补丁...";
         }
@@ -778,9 +801,9 @@ public class MainActivity extends AppCompatActivity {
                             Log.d(TAG, "✓ 补丁生成成功: " + lastGeneratedPatch.getAbsolutePath());
                             Log.d(TAG, "补丁大小: " + formatSize(lastGeneratedPatch.length()));
                             
-                            // 处理签名和加密
-                            if (withSignature || withEncryption) {
-                                processSecurityOptions(result, withSignature, withEncryption, password);
+                            // 处理签名、ZIP密码和加密
+                            if (withSignature || withZipPassword || withEncryption) {
+                                processSecurityOptions(result, withSignature, withZipPassword, withEncryption, password);
                             } else {
                                 progressBar.setVisibility(View.GONE);
                                 setButtonsEnabled(true);
@@ -820,10 +843,10 @@ public class MainActivity extends AppCompatActivity {
     }
     
     /**
-     * 处理安全选项（签名和加密）
+     * 处理安全选项（签名、ZIP密码和加密）
      */
     private void processSecurityOptions(PatchResult result, boolean withSignature, 
-                                       boolean withEncryption, String password) {
+                                       boolean withZipPassword, boolean withEncryption, String password) {
         new Thread(() -> {
             try {
                 File patchFile = result.getPatchFile();
@@ -839,7 +862,7 @@ public class MainActivity extends AppCompatActivity {
                 Log.d(TAG, "补丁文件路径: " + patchFile.getAbsolutePath());
                 Log.d(TAG, "补丁文件大小: " + patchFile.length() + " bytes");
                 
-                // 1. 签名补丁（嵌入到 zip 内部）- 必须在加密之前
+                // 1. 签名补丁（嵌入到 zip 内部）- 必须在 ZIP 密码和 AES 加密之前
                 if (withSignature && demoKeyPair != null) {
                     runOnUiThread(() -> tvStatus.setText("正在签名补丁..."));
                     
@@ -851,7 +874,34 @@ public class MainActivity extends AppCompatActivity {
                     Log.d(TAG, "✓ 签名已嵌入到补丁 zip 包内部");
                 }
                 
-                // 2. 加密补丁（在签名之后）
+                // 2. ZIP 密码保护（在签名之后，AES 加密之前）
+                if (withZipPassword) {
+                    runOnUiThread(() -> tvStatus.setText("正在添加 ZIP 密码保护..."));
+                    
+                    com.orange.update.ZipPasswordManager zipPasswordManager = 
+                        new com.orange.update.ZipPasswordManager(this);
+                    
+                    // 获取派生密码
+                    String zipPassword = zipPasswordManager.getZipPassword();
+                    
+                    // 创建加密后的 ZIP 文件
+                    File encryptedZipFile = new File(patchFile.getPath() + ".zip_enc");
+                    
+                    boolean success = zipPasswordManager.encryptZip(patchFile, encryptedZipFile, zipPassword);
+                    
+                    if (success) {
+                        // 删除原始文件，使用加密后的文件
+                        patchFile.delete();
+                        encryptedZipFile.renameTo(patchFile);
+                        finalPatchFile = patchFile;
+                        
+                        Log.d(TAG, "✓ ZIP 密码保护已添加（AES-256）");
+                    } else {
+                        throw new Exception("ZIP 密码加密失败");
+                    }
+                }
+                
+                // 3. AES 加密补丁（在签名和 ZIP 密码之后）
                 if (withEncryption) {
                     runOnUiThread(() -> tvStatus.setText("正在加密补丁..."));
                     
@@ -890,7 +940,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                 }
                 
-                // 3. 显示结果
+                // 4. 显示结果
                 File finalSignatureFile = signatureFile;
                 String finalSignature = signature;
                 File finalFinalPatchFile = finalPatchFile;
@@ -900,10 +950,18 @@ public class MainActivity extends AppCompatActivity {
                     setButtonsEnabled(true);
                     
                     String statusText = "✓ 补丁生成成功";
-                    if (withSignature && withEncryption) {
+                    if (withSignature && withZipPassword && withEncryption) {
+                        statusText += "（已签名、ZIP密码并加密）";
+                    } else if (withSignature && withZipPassword) {
+                        statusText += "（已签名并添加ZIP密码）";
+                    } else if (withSignature && withEncryption) {
                         statusText += "（已签名并加密）";
+                    } else if (withZipPassword && withEncryption) {
+                        statusText += "（ZIP密码并加密）";
                     } else if (withSignature) {
                         statusText += "（已签名）";
+                    } else if (withZipPassword) {
+                        statusText += "（已添加ZIP密码）";
                     } else if (withEncryption) {
                         statusText += "（已加密）";
                     }
@@ -914,7 +972,7 @@ public class MainActivity extends AppCompatActivity {
                     btnSelectPatch.setText("选择补丁");
                     
                     showSecuredPatchResult(result, finalFinalPatchFile, finalSignatureFile, 
-                                          finalSignature, withSignature, withEncryption);
+                                          finalSignature, withSignature, withZipPassword, withEncryption);
                     updateButtonStates();
                 });
                 
@@ -936,19 +994,22 @@ public class MainActivity extends AppCompatActivity {
      */
     private void showSecuredPatchResult(PatchResult result, File patchFile, 
                                        File signatureFile, String signature,
-                                       boolean withSignature, boolean withEncryption) {
+                                       boolean withSignature, boolean withZipPassword, boolean withEncryption) {
         StringBuilder info = new StringBuilder();
         info.append("=== 🔒 补丁生成成功 ===\n\n");
         
         // 安全选项
-        info.append("=== 安全选项 ===\n");
+        info.append("=== 安全选项（三重防护）===\n");
         if (withSignature) {
-            info.append("✓ RSA-2048 签名\n");
+            info.append("✓ RSA-2048 签名（防篡改）\n");
+        }
+        if (withZipPassword) {
+            info.append("✓ ZIP 密码保护（AES-256，防篡改）\n");
         }
         if (withEncryption) {
-            info.append("✓ AES-256-GCM 加密\n");
+            info.append("✓ AES-256-GCM 加密（存储保护）\n");
         }
-        if (!withSignature && !withEncryption) {
+        if (!withSignature && !withZipPassword && !withEncryption) {
             info.append("⚠️ 未启用安全选项\n");
         }
         info.append("\n");
@@ -959,8 +1020,12 @@ public class MainActivity extends AppCompatActivity {
         info.append("📍 位置: ").append(patchFile.getParent()).append("\n");
         info.append("📊 大小: ").append(formatSize(patchFile.length())).append("\n");
         
+        if (withZipPassword) {
+            info.append("🔑 ZIP 密码: 已加密（AES-256）\n");
+        }
+        
         if (withEncryption) {
-            info.append("🔐 状态: 已加密\n");
+            info.append("🔐 AES 加密: 已加密（AES-256-GCM）\n");
         }
         
         if (withSignature) {
@@ -979,9 +1044,18 @@ public class MainActivity extends AppCompatActivity {
                 signature.substring(0, Math.min(64, signature.length()))).append("...\n\n");
         }
         
-        // 加密信息
+        // ZIP 密码信息
+        if (withZipPassword) {
+            info.append("=== ZIP 密码保护 ===\n");
+            info.append("算法: AES-256\n");
+            info.append("密码派生: 从应用签名自动派生\n");
+            info.append("设备绑定: 是（每个设备密码不同）\n");
+            info.append("状态: 已加密\n\n");
+        }
+        
+        // AES 加密信息
         if (withEncryption) {
-            info.append("=== 加密信息 ===\n");
+            info.append("=== AES 加密信息 ===\n");
             info.append("算法: AES-256-GCM\n");
             info.append("密钥存储: Android KeyStore\n");
             info.append("认证标签: 128位\n");
@@ -1001,17 +1075,38 @@ public class MainActivity extends AppCompatActivity {
         
         // 使用说明
         info.append("=== 💡 使用说明 ===\n");
-        if (withSignature && withEncryption) {
+        if (withSignature && withZipPassword && withEncryption) {
+            info.append("1. 补丁文件: ").append(patchFile.getName()).append(" (三重保护)\n");
+            info.append("2. 签名已嵌入在 zip 包内部\n");
+            info.append("3. ZIP 已使用密码加密（AES-256）\n");
+            info.append("4. 整个文件已使用 AES-256-GCM 加密\n");
+            info.append("5. 客户端会自动验证所有安全层\n");
+        } else if (withSignature && withZipPassword) {
+            info.append("1. 补丁文件: ").append(patchFile.getName()).append(" (双重保护)\n");
+            info.append("2. 签名已嵌入在 zip 包内部\n");
+            info.append("3. ZIP 已使用密码加密（AES-256）\n");
+            info.append("4. 客户端会自动验证签名和 ZIP 密码\n");
+        } else if (withSignature && withEncryption) {
             info.append("1. 补丁文件: ").append(patchFile.getName()).append(" (已加密)\n");
             info.append("2. 签名已嵌入在 zip 包内部\n");
             info.append("3. 客户端需要先解密再验证签名\n");
             info.append("4. 解密需要相同的密钥\n");
             info.append("5. 验证签名需要公钥\n");
+        } else if (withZipPassword && withEncryption) {
+            info.append("1. 补丁文件: ").append(patchFile.getName()).append(" (双重加密)\n");
+            info.append("2. ZIP 已使用密码加密（AES-256）\n");
+            info.append("3. 整个文件已使用 AES-256-GCM 加密\n");
+            info.append("4. 客户端会自动解密和验证\n");
         } else if (withSignature) {
             info.append("1. 补丁文件: ").append(patchFile.getName()).append("\n");
             info.append("2. 签名已嵌入在 zip 包内部 (signature.sig)\n");
             info.append("3. 只需发送补丁文件给客户端\n");
             info.append("4. 客户端使用公钥验证签名\n");
+        } else if (withZipPassword) {
+            info.append("1. 补丁文件: ").append(patchFile.getName()).append(" (ZIP密码保护)\n");
+            info.append("2. ZIP 已使用密码加密（AES-256）\n");
+            info.append("3. 密码从应用签名自动派生\n");
+            info.append("4. 客户端会自动验证 ZIP 密码\n");
         } else if (withEncryption) {
             info.append("1. 补丁文件: ").append(patchFile.getName()).append(" (已加密)\n");
             info.append("2. 客户端需要相同密钥才能解密\n");
@@ -1022,14 +1117,20 @@ public class MainActivity extends AppCompatActivity {
         // 安全提示
         info.append("⚠️ 安全提示:\n");
         if (withSignature) {
-            info.append("• 签名可以防止补丁被篡改\n");
+            info.append("• RSA 签名可以防止补丁被篡改\n");
+        }
+        if (withZipPassword) {
+            info.append("• ZIP 密码保护可以防止补丁被篡改\n");
+            info.append("• 密码从应用签名派生，设备绑定\n");
         }
         if (withEncryption) {
-            info.append("• 加密可以保护补丁内容\n");
+            info.append("• AES 加密可以保护补丁内容\n");
             info.append("• 客户端需要相同密钥才能解密\n");
         }
-        if (withSignature && withEncryption) {
-            info.append("• 签名+加密提供最高安全级别\n");
+        if (withSignature && withZipPassword && withEncryption) {
+            info.append("• 三重保护提供最高安全级别！\n");
+        } else if ((withSignature && withZipPassword) || (withSignature && withEncryption) || (withZipPassword && withEncryption)) {
+            info.append("• 双重保护提供高安全级别\n");
         }
         
         tvInfo.setText(info.toString());
