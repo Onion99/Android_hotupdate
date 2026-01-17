@@ -107,18 +107,80 @@ public class HotUpdateHelper {
                 }
                 
                 if (callback != null) {
-                    callback.onProgress(10, "准备应用补丁...");
+                    callback.onProgress(10, "检查 ZIP 密码保护...");
                 }
                 
-                // 2. 创建 PatchInfo
-                PatchInfo patchInfo = createPatchInfo(patchFile);
+                // 2. 检查并处理 ZIP 密码加密
+                File actualPatchFile = patchFile;
+                ZipPasswordManager zipPasswordManager = storage.getZipPasswordManager();
+                
+                if (zipPasswordManager.isEncrypted(patchFile)) {
+                    Log.d(TAG, "检测到 ZIP 密码加密，正在验证...");
+                    
+                    if (callback != null) {
+                        callback.onProgress(15, "验证 ZIP 密码...");
+                    }
+                    
+                    // 获取 ZIP 密码
+                    String zipPassword = zipPasswordManager.getZipPassword();
+                    
+                    // 验证密码
+                    boolean passwordValid = zipPasswordManager.verifyPassword(patchFile, zipPassword);
+                    
+                    if (!passwordValid) {
+                        if (callback != null) {
+                            callback.onError("⚠️ ZIP 密码验证失败！补丁可能已被篡改。");
+                        }
+                        return;
+                    }
+                    
+                    Log.d(TAG, "✓ ZIP 密码验证成功");
+                    
+                    if (callback != null) {
+                        callback.onProgress(18, "解密 ZIP 文件...");
+                    }
+                    
+                    // 解密 ZIP 到临时文件
+                    File tempDir = new File(context.getCacheDir(), "patch_decrypt_" + System.currentTimeMillis());
+                    tempDir.mkdirs();
+                    
+                    boolean extracted = zipPasswordManager.extractEncryptedZip(patchFile, tempDir, zipPassword);
+                    
+                    if (!extracted) {
+                        if (callback != null) {
+                            callback.onError("ZIP 解密失败");
+                        }
+                        // 清理临时目录
+                        deleteDirectory(tempDir);
+                        return;
+                    }
+                    
+                    // 重新打包为未加密的 ZIP（临时文件）
+                    File decryptedZip = new File(context.getCacheDir(), "patch_decrypted_" + System.currentTimeMillis() + ".zip");
+                    repackZip(tempDir, decryptedZip);
+                    
+                    // 使用解密后的文件
+                    actualPatchFile = decryptedZip;
+                    
+                    // 清理临时目录
+                    deleteDirectory(tempDir);
+                    
+                    Log.d(TAG, "✓ ZIP 解密完成");
+                }
                 
                 if (callback != null) {
-                    callback.onProgress(20, "验证补丁文件...");
+                    callback.onProgress(20, "准备应用补丁...");
                 }
                 
-                // 3. 读取补丁文件内容
-                byte[] patchData = readFileToBytes(patchFile);
+                // 3. 创建 PatchInfo
+                PatchInfo patchInfo = createPatchInfo(actualPatchFile);
+                
+                if (callback != null) {
+                    callback.onProgress(25, "验证补丁文件...");
+                }
+                
+                // 4. 读取补丁文件内容
+                byte[] patchData = readFileToBytes(actualPatchFile);
                 if (patchData == null) {
                     if (callback != null) {
                         callback.onError("读取补丁文件失败");
@@ -126,7 +188,7 @@ public class HotUpdateHelper {
                     return;
                 }
                 
-                // 4. 保存补丁文件到存储
+                // 5. 保存补丁文件到存储
                 boolean saved = storage.savePatchFile(patchInfo.getPatchId(), patchData);
                 if (!saved) {
                     if (callback != null) {
@@ -139,9 +201,9 @@ public class HotUpdateHelper {
                     callback.onProgress(40, "应用补丁...");
                 }
                 
-                // 5. 应用补丁（PatchApplier 会自动处理解密和资源合并）
+                // 6. 应用补丁（PatchApplier 会自动处理解密和资源合并）
                 // 检查是否包含资源，如果包含则显示资源合并进度
-                boolean hasResources = hasResourcePatch(patchFile);
+                boolean hasResources = hasResourcePatch(actualPatchFile);
                 if (hasResources && callback != null) {
                     callback.onProgress(50, "合并资源文件...");
                 }
@@ -166,7 +228,7 @@ public class HotUpdateHelper {
                     // 检查补丁内容类型
                     result.dexInjected = DexPatcher.isSupported(); // DEX 热更新是否支持
                     result.soLoaded = false; // SO 库加载状态（暂不支持检测）
-                    result.resourcesLoaded = hasResourcePatch(patchFile); // 检查是否包含资源
+                    result.resourcesLoaded = hasResourcePatch(actualPatchFile); // 检查是否包含资源
                     result.needsRestart = result.resourcesLoaded; // 资源更新需要重启
                     
                     if (callback != null) {
@@ -177,6 +239,11 @@ public class HotUpdateHelper {
                     if (callback != null) {
                         callback.onError("补丁应用失败");
                     }
+                }
+                
+                // 清理临时解密文件
+                if (actualPatchFile != patchFile && actualPatchFile.exists()) {
+                    actualPatchFile.delete();
                 }
                 
             } catch (Exception e) {
@@ -626,4 +693,44 @@ public class HotUpdateHelper {
                     '}';
         }
     }
+    
+    /**
+     * 删除目录及其所有内容
+     */
+    private void deleteDirectory(File directory) {
+        if (directory.exists()) {
+            File[] files = directory.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    if (file.isDirectory()) {
+                        deleteDirectory(file);
+                    } else {
+                        file.delete();
+                    }
+                }
+            }
+            directory.delete();
+        }
+    }
+    
+    /**
+     * 重新打包目录为 ZIP 文件（不加密，不压缩）
+     */
+    private void repackZip(File sourceDir, File destZip) throws Exception {
+        net.lingala.zip4j.ZipFile zipFile = new net.lingala.zip4j.ZipFile(destZip);
+        net.lingala.zip4j.model.ZipParameters params = new net.lingala.zip4j.model.ZipParameters();
+        params.setCompressionMethod(net.lingala.zip4j.model.enums.CompressionMethod.STORE);
+        
+        File[] files = sourceDir.listFiles();
+        if (files != null) {
+            for (File file : files) {
+                if (file.isDirectory()) {
+                    zipFile.addFolder(file, params);
+                } else {
+                    zipFile.addFile(file, params);
+                }
+            }
+        }
+    }
 }
+
