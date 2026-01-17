@@ -1,0 +1,84 @@
+// Maven Central 发布配置
+apply plugin: 'maven-publish'
+apply plugin: 'signing'
+
+// 从 gradle.properties 或环境变量读取凭证
+ext {
+    // Maven Central 凭证
+    ossrhUsername = project.findProperty('ossrhUsername') ?: System.getenv('OSSRH_USERNAME') ?: ''
+    ossrhPassword = project.findProperty('ossrhPassword') ?: System.getenv('OSSRH_PASSWORD') ?: ''
+    
+    // 签名密钥
+    signingKeyId = project.findProperty('signing.keyId') ?: System.getenv('SIGNING_KEY_ID') ?: ''
+    signingPassword = project.findProperty('signing.password') ?: System.getenv('SIGNING_PASSWORD') ?: ''
+    signingSecretKeyRingFile = project.findProperty('signing.secretKeyRingFile') ?: System.getenv('SIGNING_SECRET_KEY_RING_FILE') ?: ''
+    
+    // POM 信息
+    pomGroupId = 'io.github.706412584'
+    pomVersion = '1.2.9'
+    pomUrl = 'https://github.com/706412584/Android_hotupdate'
+    pomScmUrl = 'https://github.com/706412584/Android_hotupdate.git'
+    pomScmConnection = 'scm:git:git://github.com/706412584/Android_hotupdate.git'
+    pomScmDevConnection = 'scm:git:ssh://github.com/706412584/Android_hotupdate.git'
+    
+    pomLicenseName = 'The Apache Software License, Version 2.0'
+    pomLicenseUrl = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+    pomLicenseDist = 'repo'
+    
+    pomDeveloperId = '706412584'
+    pomDeveloperName = 'Your Name'
+    pomDeveloperEmail = 'your.email@example.com'
+}
+
+// 配置发布仓库
+publishing {
+    repositories {
+        maven {
+            name = 'sonatype'
+            def releasesRepoUrl = 'https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/'
+            def snapshotsRepoUrl = 'https://s01.oss.sonatype.org/content/repositories/snapshots/'
+            url = version.endsWith('SNAPSHOT') ? snapshotsRepoUrl : releasesRepoUrl
+            
+            credentials {
+                username = ossrhUsername
+                password = ossrhPassword
+            }
+        }
+    }
+}
+
+// 配置签名
+signing {
+    if (signingKeyId && signingPassword && signingSecretKeyRingFile) {
+        sign publishing.publications
+    }
+}
+
+// 通用 POM 配置方法
+ext.configurePom = { pom ->
+    pom.name = project.name
+    pom.description = 'Android hot update library for applying patches without reinstalling'
+    pom.url = pomUrl
+    
+    pom.licenses {
+        license {
+            name = pomLicenseName
+            url = pomLicenseUrl
+            distribution = pomLicenseDist
+        }
+    }
+    
+    pom.developers {
+        developer {
+            id = pomDeveloperId
+            name = pomDeveloperName
+            email = pomDeveloperEmail
+        }
+    }
+    
+    pom.scm {
+        url = pomScmUrl
+        connection = pomScmConnection
+        developerConnection = pomScmDevConnection
+    }
+}

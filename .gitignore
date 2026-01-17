@@ -34,3 +34,8 @@ local.properties
 # Signing files
 *.jks
 *.keystore
+
+# Maven Central 发布凭证
+gradle.properties
+secring.gpg
+*.asc

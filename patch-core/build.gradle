@@ -1,11 +1,14 @@
 plugins {
     id 'java-library'
     id 'maven-publish'
+    id 'signing'
 }
 
 java {
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
+    withSourcesJar()
+    withJavadocJar()
 }
 
 dependencies {
@@ -34,13 +37,20 @@ test {
     useJUnitPlatform()
 }
 
+// 应用 Maven Central 发布配置
+apply from: "${rootProject.projectDir}/maven-publish.gradle"
+
 publishing {
     publications {
         maven(MavenPublication) {
             from components.java
-            groupId = 'com.github.706412584'
+            groupId = pomGroupId
             artifactId = 'patch-core'
-            version = '1.2.8'
+            version = pomVersion
+            
+            pom {
+                configurePom(it)
+            }
         }
     }
 }
