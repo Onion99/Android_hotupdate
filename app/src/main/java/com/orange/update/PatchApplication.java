@@ -28,10 +28,11 @@ public class PatchApplication extends Application {
      * 加载已应用的补丁
      * 
      * 1. 检查是否有已应用的补丁
-     * 2. 如果补丁包含资源，使用 ResourceMerger 合并原始 APK 和补丁资源
-     * 3. 生成完整资源包到 merged_resources.apk
-     * 4. 加载完整资源包（而不是直接使用补丁）
-     * 5. 加载 DEX 补丁
+     * 2. 验证补丁完整性（防止篡改）
+     * 3. 如果补丁包含资源，使用 ResourceMerger 合并原始 APK 和补丁资源
+     * 4. 生成完整资源包到 merged_resources.apk
+     * 5. 加载完整资源包（而不是直接使用补丁）
+     * 6. 加载 DEX 补丁
      */
     private void loadPatchIfNeeded() {
         try {
@@ -46,6 +47,14 @@ public class PatchApplication extends Application {
             }
             
             Log.d(TAG, "Loading applied patch: " + appliedPatchId);
+            
+            // ✅ 验证补丁完整性（防止篡改）
+            PatchStorage storage = new PatchStorage(this);
+            if (!storage.verifyAndRecoverPatch()) {
+                Log.e(TAG, "⚠️ Patch integrity verification failed and recovery failed");
+                Log.e(TAG, "Patch has been cleared for security reasons");
+                return;
+            }
             
             // 获取已应用的补丁文件
             java.io.File updateDir = new java.io.File(getFilesDir(), "update");
@@ -92,7 +101,7 @@ public class PatchApplication extends Application {
                 Log.w(TAG, "Failed to load resource patch", e);
             }
             
-            Log.i(TAG, "Patch loading completed in attachBaseContext");
+            Log.i(TAG, "✅ Patch loading completed with integrity verification");
             
         } catch (Exception e) {
             Log.e(TAG, "Failed to load patch in attachBaseContext", e);

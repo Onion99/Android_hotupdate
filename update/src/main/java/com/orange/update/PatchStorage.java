@@ -67,6 +67,9 @@ public class PatchStorage {
     private static final String KEY_PATCH_INFO_PREFIX = "patch_info_";
     private static final String KEY_DOWNLOADED_PATCH_IDS = "downloaded_patch_ids";
     private static final String KEY_PREVIOUS_PATCH_ID = "previous_patch_id";
+    private static final String KEY_APPLIED_PATCH_HASH = "applied_patch_hash";
+    private static final String KEY_TAMPER_COUNT = "tamper_count";
+    private static final int MAX_TAMPER_COUNT = 3;
     
     private final Context context;
     private final SharedPreferences prefs;
@@ -449,6 +452,15 @@ public class PatchStorage {
                 // API 21-22 不支持 KeyStore 加密，直接复制
                 Log.w(TAG, "API level < 23, copying patch without decryption");
                 copyFile(patchFile, appliedFile);
+            }
+            
+            // 计算并保存文件哈希值（用于完整性验证）
+            String hash = calculateSHA256(appliedFile);
+            if (hash != null) {
+                prefs.edit().putString(KEY_APPLIED_PATCH_HASH, hash).apply();
+                Log.d(TAG, "Saved patch hash: " + hash.substring(0, 16) + "...");
+            } else {
+                Log.w(TAG, "Failed to calculate patch hash");
             }
             
             Log.d(TAG, "Prepared patch to applied directory: " + patchId);
@@ -945,6 +957,164 @@ public class PatchStorage {
             }
         }
         return size;
+    }
+    
+    // ==================== 补丁完整性验证 ====================
+    
+    /**
+     * 计算文件的 SHA-256 哈希值
+     * @param file 文件
+     * @return SHA-256 哈希值（十六进制字符串），如果失败返回 null
+     */
+    private String calculateSHA256(File file) {
+        if (file == null || !file.exists()) {
+            return null;
+        }
+        
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            try (FileInputStream fis = new FileInputStream(file)) {
+                byte[] buffer = new byte[8192];
+                int bytesRead;
+                while ((bytesRead = fis.read(buffer)) != -1) {
+                    digest.update(buffer, 0, bytesRead);
+                }
+            }
+            byte[] hashBytes = digest.digest();
+            
+            // 转换为十六进制字符串
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hashBytes) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to calculate SHA-256", e);
+            return null;
+        }
+    }
+    
+    /**
+     * 验证已应用补丁的完整性
+     * @return 验证是否通过
+     */
+    public boolean verifyAppliedPatchIntegrity() {
+        File appliedFile = getAppliedPatchFile();
+        if (!appliedFile.exists()) {
+            Log.d(TAG, "No applied patch file to verify");
+            return false;
+        }
+        
+        String savedHash = prefs.getString(KEY_APPLIED_PATCH_HASH, null);
+        if (savedHash == null || savedHash.isEmpty()) {
+            Log.w(TAG, "No saved hash found, patch may be from old version (backward compatible)");
+            return true; // 向后兼容：旧版本没有哈希值
+        }
+        
+        String currentHash = calculateSHA256(appliedFile);
+        if (currentHash == null) {
+            Log.e(TAG, "Failed to calculate current hash");
+            return false;
+        }
+        
+        boolean valid = savedHash.equals(currentHash);
+        
+        if (valid) {
+            Log.d(TAG, "✅ Patch integrity verified: " + currentHash.substring(0, 16) + "...");
+        } else {
+            Log.e(TAG, "⚠️ PATCH INTEGRITY CHECK FAILED!");
+            Log.e(TAG, "Expected: " + savedHash);
+            Log.e(TAG, "Actual:   " + currentHash);
+            Log.e(TAG, "File may have been tampered with!");
+        }
+        
+        return valid;
+    }
+    
+    /**
+     * 验证并恢复补丁（如果检测到篡改）
+     * @return 验证是否通过或恢复是否成功
+     */
+    public boolean verifyAndRecoverPatch() {
+        // 1. 验证完整性
+        if (verifyAppliedPatchIntegrity()) {
+            // 完整性正常，重置篡改计数
+            prefs.edit().putInt(KEY_TAMPER_COUNT, 0).apply();
+            return true;
+        }
+        
+        // 2. 检测到篡改
+        int tamperCount = prefs.getInt(KEY_TAMPER_COUNT, 0) + 1;
+        prefs.edit().putInt(KEY_TAMPER_COUNT, tamperCount).apply();
+        
+        Log.e(TAG, "⚠️ Patch tampered! Attempt count: " + tamperCount + "/" + MAX_TAMPER_COUNT);
+        
+        // 3. 超过阈值，清除补丁
+        if (tamperCount >= MAX_TAMPER_COUNT) {
+            Log.e(TAG, "⚠️ Too many tamper attempts (" + tamperCount + "), clearing patch for security");
+            
+            String appliedPatchId = getAppliedPatchId();
+            saveAppliedPatchId(null);
+            prefs.edit().remove(KEY_APPLIED_PATCH_HASH).apply();
+            
+            File appliedFile = getAppliedPatchFile();
+            if (appliedFile.exists()) {
+                securityManager.secureDelete(appliedFile);
+            }
+            
+            // 上报篡改尝试（可选）
+            reportTamperAttempt(appliedPatchId, tamperCount);
+            
+            return false;
+        }
+        
+        // 4. 尝试从加密存储中恢复
+        String appliedPatchId = getAppliedPatchId();
+        if (appliedPatchId != null && !appliedPatchId.isEmpty()) {
+            Log.i(TAG, "Attempting to recover patch from encrypted storage...");
+            
+            File recoveredFile = decryptPatchToApplied(appliedPatchId);
+            
+            if (recoveredFile != null && verifyAppliedPatchIntegrity()) {
+                Log.i(TAG, "✅ Patch recovered successfully from encrypted storage");
+                // 重置篡改计数
+                prefs.edit().putInt(KEY_TAMPER_COUNT, 0).apply();
+                return true;
+            } else {
+                Log.e(TAG, "❌ Failed to recover patch from encrypted storage");
+            }
+        }
+        
+        return false;
+    }
+    
+    /**
+     * 上报篡改尝试（可选实现）
+     * @param patchId 补丁ID
+     * @param attemptCount 尝试次数
+     */
+    private void reportTamperAttempt(String patchId, int attemptCount) {
+        // TODO: 实现上报逻辑，发送到服务器进行安全分析
+        Log.e(TAG, "Reporting tamper attempt to server: patchId=" + patchId + ", attempts=" + attemptCount);
+        
+        // 示例：可以通过 UpdateManager 或其他方式上报
+        // UpdateManager.getInstance().reportSecurityEvent("patch_tampered", patchId, attemptCount);
+    }
+    
+    /**
+     * 获取篡改尝试次数
+     * @return 篡改尝试次数
+     */
+    public int getTamperAttemptCount() {
+        return prefs.getInt(KEY_TAMPER_COUNT, 0);
+    }
+    
+    /**
+     * 重置篡改计数
+     */
+    public void resetTamperCount() {
+        prefs.edit().putInt(KEY_TAMPER_COUNT, 0).apply();
+        Log.d(TAG, "Reset tamper count");
     }
     
     /**
