@@ -277,6 +277,16 @@ public class PatchStorage {
         
         File patchFile = getPatchFile(patchId);
         
+        // 确保父目录存在
+        File parentDir = patchFile.getParentFile();
+        if (parentDir != null && !parentDir.exists()) {
+            if (!parentDir.mkdirs()) {
+                Log.e(TAG, "Failed to create parent directory: " + parentDir.getAbsolutePath());
+                return false;
+            }
+            Log.d(TAG, "Created parent directory: " + parentDir.getAbsolutePath());
+        }
+        
         try {
             // 加密数据 (API 23+) 或直接存储 (API 21-22)
             byte[] dataToWrite;
