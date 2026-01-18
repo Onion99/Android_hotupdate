@@ -1,5 +1,6 @@
 @echo off
-REM Maven Central 发布快捷方式
+chcp 65001 >nul
+REM Maven Central Publishing Shortcut
 cd maven-central
 call publish.bat
 cd ..

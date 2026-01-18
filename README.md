@@ -13,43 +13,40 @@
 - 🚀 **高性能** - Native 引擎加速，补丁生成快 2-3 倍
 - 📱 **设备端生成** - 支持在 Android 设备上直接生成补丁
 - 🛠️ **多种方式** - 命令行、Gradle 插件、Android SDK
-- 🔒 **安全可靠** - 支持签名验证，防止篡改
+- 🔒 **安全可靠** - 支持签名验证和加密，防止篡改
 - 🎯 **兼容性好** - 支持 Android 5.0+ (API 21+)
 - ⚡ **自动降级** - Native 不可用时自动使用 Java 引擎
 
 ## 📚 文档导航
 
 - **[快速开始](#-快速开始)** - 5 分钟上手
-- **[签名验证](#6-使用签名验证可选推荐生产环境使用)** - 保护补丁安全
+- **[安全机制](#-安全机制)** - 签名验证和加密保护
 - **[Demo 下载](https://github.com/706412584/Android_hotupdate/releases/tag/demo)** - 下载体验 APK
-- **[详细使用文档](docs/USAGE.md)** - 完整的使用说明
+- **[详细使用文档](docs/USAGE.md)** - 完整的 API 使用说明
 - **[常见问题](docs/FAQ.md)** - 问题排查指南
-- **[JitPack 发布指南](JITPACK_RELEASE.md)** - 如何发布新版本
-- **[补丁包格式说明](docs/PATCH_FORMAT.md)** - 补丁包结构详解
+- **[补丁包格式](docs/PATCH_FORMAT.md)** - 补丁包结构详解
+- **[发布指南](JITPACK_RELEASE.md)** - 如何发布新版本
 
 ## 🚀 快速开始
 
-### 方式一：使用 Maven Central（推荐）
+### 1. 添加依赖
 
-**1. 添加依赖**
+**方式一：使用 Maven Central（推荐）**
 
 ```groovy
 dependencies {
     // 热更新核心库（包含完整功能）
-    implementation 'io.github.706412584:update:1.3.0'
+    implementation 'io.github.706412584:update:1.3.1'
     
     // 如果需要在设备上生成补丁，添加：
-    implementation 'io.github.706412584:patch-generator-android:1.3.0'
+    implementation 'io.github.706412584:patch-generator-android:1.3.1'
 }
 ```
 
-### 方式二：使用 JitPack
-
-**1. 添加 JitPack 仓库**
-
-在 `settings.gradle` 中添加：
+**方式二：使用 JitPack**
 
 ```groovy
+// settings.gradle
 dependencyResolutionManagement {
     repositories {
         google()
@@ -57,21 +54,15 @@ dependencyResolutionManagement {
         maven { url 'https://jitpack.io' }
     }
 }
-```
 
-**2. 添加依赖**
-
-```groovy
+// build.gradle
 dependencies {
-    // 热更新 SDK
-    implementation 'com.github.706412584.Android_hotupdate:update:v1.3.0'
-    
-    // 补丁生成 SDK（可选）
-    implementation 'com.github.706412584.Android_hotupdate:patch-generator-android:v1.3.0'
+    implementation 'com.github.706412584.Android_hotupdate:update:v1.3.1'
+    implementation 'com.github.706412584.Android_hotupdate:patch-generator-android:v1.3.1'
 }
 ```
 
-**3. 生成补丁**
+### 2. 生成补丁
 
 ```java
 AndroidPatchGenerator generator = new AndroidPatchGenerator.Builder(context)
@@ -91,12 +82,11 @@ AndroidPatchGenerator generator = new AndroidPatchGenerator.Builder(context)
 generator.generateInBackground();
 ```
 
-**4. 应用补丁**
+### 3. 应用补丁
 
-使用 `update` 模块中的核心类：
+使用 `HotUpdateHelper` 类（推荐）：
 
 ```java
-// 方式一：使用 HotUpdateHelper（推荐 - 最简单）
 HotUpdateHelper helper = new HotUpdateHelper(context);
 helper.applyPatch(patchFile, new HotUpdateHelper.Callback() {
     @Override
@@ -108,8 +98,7 @@ helper.applyPatch(patchFile, new HotUpdateHelper.Callback() {
     public void onSuccess(HotUpdateHelper.PatchResult result) {
         Log.i(TAG, "热更新成功！");
         Log.i(TAG, "补丁版本: " + result.patchVersion);
-        // DEX 和 SO 立即生效
-        // 资源更新需要重启应用
+        // DEX 和 SO 立即生效，资源更新需要重启应用
     }
     
     @Override
@@ -117,89 +106,14 @@ helper.applyPatch(patchFile, new HotUpdateHelper.Callback() {
         Log.e(TAG, "热更新失败: " + message);
     }
 });
-
-// 方式二：使用 PatchApplier（更灵活的控制）
-PatchApplier patchApplier = new PatchApplier(context, new PatchStorage(context));
-
-// 创建 PatchInfo（从本地文件）
-PatchInfo patchInfo = new PatchInfo();
-patchInfo.setPatchId("patch_001");
-patchInfo.setPatchVersion("1.3.0");
-patchInfo.setDownloadUrl("file://" + patchFile.getAbsolutePath());
-patchInfo.setMd5(Md5Utils.calculateMd5(patchFile));
-
-// 应用补丁
-boolean success = patchApplier.apply(patchInfo);
-if (success) {
-    Log.i(TAG, "热更新成功！");
-} else {
-    Log.e(TAG, "热更新失败");
-}
-
-// 方式三：直接使用底层 API（最灵活）
-// 1. 注入 DEX 补丁
-if (DexPatcher.isSupported()) {
-    try {
-        DexPatcher.injectPatchDex(context, dexFile.getAbsolutePath());
-        Log.i(TAG, "DEX 补丁注入成功");
-    } catch (DexPatcher.PatchException e) {
-        Log.e(TAG, "DEX 注入失败", e);
-    }
-}
-
-// 2. 加载 SO 库补丁
-try {
-    SoPatcher.loadPatchLibraries(context, patchFile);
-    Log.i(TAG, "SO 库加载成功");
-} catch (SoPatcher.PatchSoException e) {
-    Log.e(TAG, "SO 加载失败", e);
-}
-
-// 3. 加载资源补丁
-try {
-    ResourcePatcher.loadPatchResources(context, resourceFile.getAbsolutePath());
-    Log.i(TAG, "资源补丁加载成功");
-} catch (ResourcePatcher.PatchResourceException e) {
-    Log.e(TAG, "资源加载失败", e);
-}
-
-// 方式四：使用 UpdateManager（服务器端更新流程）
-// 适用于从服务器检查更新、下载补丁的场景
-UpdateConfig config = new UpdateConfig.Builder()
-    .serverUrl("https://your-server.com/api")
-    .appKey("your-app-key")
-    .appVersion("1.0.0")
-    .build();
-
-UpdateManager.init(context, config);
-UpdateManager.getInstance().setCallback(new SimpleUpdateCallback() {
-    @Override
-    public void onCheckComplete(boolean hasUpdate, PatchInfo patchInfo) {
-        if (hasUpdate) {
-            // 下载并应用补丁
-            UpdateManager.getInstance().downloadPatch(patchInfo);
-        }
-    }
-    
-    @Override
-    public void onDownloadComplete(PatchInfo patchInfo) {
-        // 应用补丁
-        UpdateManager.getInstance().applyPatch(patchInfo);
-    }
-});
-
-UpdateManager.getInstance().checkUpdate();
 ```
 
-> **注意**：
-> - `HotUpdateHelper` 是推荐的高层 API，提供简单的回调接口
-> - `PatchApplier` 提供更灵活的控制
-> - `RealHotUpdate` 是 demo 应用中的示例封装类，展示了如何组合使用这些核心 API
-> - 你可以参考它的实现（`app/src/main/java/com/orange/update/RealHotUpdate.java`）来创建自己的封装
+> 💡 **更多应用方式**：
+> - [使用 PatchApplier](docs/USAGE.md#使用-patchapplier) - 更灵活的控制
+> - [使用底层 API](docs/USAGE.md#使用底层-api) - DexPatcher、SoPatcher、ResourcePatcher
+> - [使用 UpdateManager](docs/USAGE.md#使用-updatemanager) - 服务器端更新流程
 
-**5. 在 Application 中集成**
-
-**方式一：使用 HotUpdateHelper（推荐 - 最简单）**
+### 4. 在 Application 中集成
 
 ```java
 public class MyApplication extends Application {
@@ -214,488 +128,120 @@ public class MyApplication extends Application {
 }
 ```
 
-**方式二：继承 PatchApplication（Demo 应用方式）**
+> 📖 **详细配置说明**：[Application 集成指南](docs/USAGE.md#application-集成)
 
-```java
-public class MyApplication extends PatchApplication {
-    @Override
-    public void onCreate() {
-        super.onCreate();
-        // 你的其他初始化代码
+## 🛡️ 安全机制
+
+为了防止补丁被篡改和窃取，系统提供了 **APK 签名验证** 和 **AES 加密** 两种安全机制。
+
+### APK 签名验证（推荐）
+
+使用与 APK 相同的签名密钥对补丁进行签名，确保补丁来源可信且未被篡改。
+
+**生成带签名的补丁：**
+
+```groovy
+// build.gradle
+patchGenerator {
+    baselineApk = file("baseline/app-v1.2.apk")
+    outputDir = file("build/patch")
+    
+    // 配置签名（使用与 APK 相同的签名密钥）
+    signing {
+        keystoreFile = file("keystore/app.jks")
+        keystorePassword = "your_keystore_password"
+        keyAlias = "your_key_alias"
+        keyPassword = "your_key_password"
     }
 }
 ```
 
-**AndroidManifest.xml 配置：**
-```xml
-<application
-    android:name=".MyApplication"
-    ...>
-</application>
-```
-
-> 📖 **详细配置说明**：
-> - [使用 HotUpdateHelper](docs/USAGE.md#方式一使用-hotupdatehelper推荐---最简单)
-> - [使用 PatchApplication](docs/USAGE.md#方式二直接继承-patchapplicationdemo-应用方式)
-> - [PatchApplication 完整源码](docs/USAGE.md#3-patchapplication-完整源码demo-实现)
-
-**6. 使用签名验证（可选，推荐生产环境使用）**
-
-为了防止补丁被篡改，可以启用签名验证：
-
-```java
-// 步骤 1: 生成 RSA 密钥对（在开发机器上执行一次）
-// 使用 keytool 或 openssl 生成密钥对
-// keytool -genkeypair -alias patch_key -keyalg RSA -keysize 2048 -validity 10000 -keystore patch.keystore
-
-// 步骤 2: 导出公钥（Base64 格式）
-// keytool -exportcert -alias patch_key -keystore patch.keystore -rfc -file public_key.pem
-// 然后将 PEM 文件转换为 Base64 字符串
-
-// 步骤 3: 在应用中配置公钥
-SecurityManager securityManager = new SecurityManager(context);
-String publicKeyBase64 = "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA..."; // 你的公钥
-securityManager.setSignaturePublicKey(publicKeyBase64);
-
-// 步骤 4: 生成补丁时签名（在服务器端）
-// 使用私钥对补丁文件进行签名
-// openssl dgst -sha256 -sign private_key.pem -out patch.sig patch.zip
-// base64 patch.sig > patch.sig.base64
-
-// 步骤 5: 应用补丁时验证签名
-String patchSignature = "从服务器获取的 Base64 签名"; // 从服务器下载的签名
-File patchFile = new File("/path/to/patch.zip");
-
-// 验证签名
-if (securityManager.verifySignature(patchFile, patchSignature)) {
-    Log.i(TAG, "签名验证通过，可以安全应用补丁");
-    // 应用补丁
-    hotUpdate.applyPatch(patchFile, callback);
-} else {
-    Log.e(TAG, "签名验证失败，补丁可能被篡改！");
-    // 拒绝应用补丁
-}
-```
-
-**7. 使用加密保护补丁（可选，推荐敏感内容使用）**
-
-为了保护补丁内容不被窃取，可以对补丁进行加密：
-
-```java
-// 步骤 1: 加密补丁（在服务器端或生成时）
-SecurityManager securityManager = new SecurityManager(context);
-File patchFile = new File("/path/to/patch.zip");
-
-// 方式 1: 使用 AES-256-GCM 加密（KeyStore）
-File encryptedPatch = securityManager.encryptPatch(patchFile);
-// 生成加密文件: patch.zip.enc
-
-// 方式 2: 使用密码加密
-String password = "your_secure_password";
-File encryptedPatch = securityManager.encryptPatchWithPassword(patchFile, password);
-// 生成加密文件: patch.zip.enc
-
-// 步骤 2: 客户端解密并应用（推荐方式）
-SecurityManager securityManager = new SecurityManager(context);
-File encryptedPatch = new File("/path/to/patch.zip.enc");
-
-try {
-    File decryptedPatch;
-    
-    // 根据加密方式选择解密方法
-    if (hasPassword) {
-        // 使用密码解密（密码作为参数传入）
-        String password = getPasswordFromConfig(); // 从配置或安全存储获取
-        decryptedPatch = securityManager.decryptPatchWithPassword(encryptedPatch, password);
-    } else {
-        // 使用 KeyStore 解密
-        decryptedPatch = securityManager.decryptPatch(encryptedPatch);
-    }
-    
-    // 应用解密后的补丁（使用 PatchApplier）
-    PatchApplier patchApplier = new PatchApplier(context, new PatchStorage(context));
-    
-    // 创建 PatchInfo
-    PatchInfo patchInfo = new PatchInfo();
-    patchInfo.setPatchId("patch_001");
-    patchInfo.setPatchVersion("1.3.0");
-    patchInfo.setDownloadUrl("file://" + decryptedPatch.getAbsolutePath());
-    patchInfo.setMd5(Md5Utils.calculateMd5(decryptedPatch));
-    
-    // 应用补丁
-    boolean success = patchApplier.apply(patchInfo);
-    if (success) {
-        Log.i(TAG, "补丁应用成功");
-    }
-    
-} catch (SecurityException e) {
-    Log.e(TAG, "解密失败: " + e.getMessage());
-}
-
-// 注意：Demo 应用会弹出密码输入对话框，这只是为了演示方便
-// 在实际应用中，应该通过参数传入密码，而不是弹窗
-```
-
-**8. 组合使用签名和加密（最高安全级别）**
-
-在生产环境中，建议同时使用签名和加密：
-
-```java
-// 服务器端：生成、加密并签名补丁
-SecurityManager securityManager = new SecurityManager(context);
-
-// 1. 生成补丁
-File patchFile = generatePatch(baseApk, newApk);
-
-// 2. 加密补丁（可选使用密码）
-File encryptedPatch = securityManager.encryptPatchWithPassword(patchFile, "password");
-
-// 3. 对加密后的补丁签名
-String signature = signPatchFile(encryptedPatch, privateKey);
-saveSignature(signature, encryptedPatch.getPath() + ".sig");
-
-// 客户端：验证签名、解密并应用
-SecurityManager securityManager = new SecurityManager(context);
-securityManager.setSignaturePublicKey(publicKeyBase64);
-
-File encryptedPatch = downloadPatch();
-String signature = downloadSignature();
-
-// 1. 验证签名
-if (!securityManager.verifySignature(encryptedPatch, signature)) {
-    Log.e(TAG, "签名验证失败！");
-    return;
-}
-
-// 2. 解密并应用补丁
-String password = getPasswordFromConfig(); // 从配置获取密码
-File decryptedPatch = securityManager.decryptPatchWithPassword(encryptedPatch, password);
-
-// 应用解密后的补丁（使用 PatchApplier）
-PatchApplier patchApplier = new PatchApplier(context, new PatchStorage(context));
-
-// 创建 PatchInfo
-PatchInfo patchInfo = new PatchInfo();
-patchInfo.setPatchId("patch_001");
-patchInfo.setPatchVersion("1.3.0");
-patchInfo.setDownloadUrl("file://" + decryptedPatch.getAbsolutePath());
-patchInfo.setMd5(Md5Utils.calculateMd5(decryptedPatch));
-
-// 应用补丁
-boolean success = patchApplier.apply(patchInfo);
-if (success) {
-    Log.i(TAG, "补丁应用成功");
-}
-```
-
-**9. 使用 HotUpdateHelper 的安全策略（推荐）**
-
-`HotUpdateHelper` 提供了简单易用的安全策略 API，无需手动检查签名和加密：
+**启用签名验证：**
 
 ```java
 HotUpdateHelper helper = new HotUpdateHelper(context);
 
-// 配置安全策略
-helper.setRequireSignature(true);  // 强制要求补丁签名
-helper.setRequireEncryption(true); // 强制要求补丁加密
+// 强制要求补丁签名（推荐生产环境开启）
+helper.setRequireSignature(true);
 
-// 应用补丁时会自动检查安全策略
-helper.applyPatch(patchFile, new HotUpdateHelper.Callback() {
-    @Override
-    public void onProgress(int percent, String message) {
-        Log.d(TAG, "进度: " + percent + "%");
-    }
-    
-    @Override
-    public void onSuccess(HotUpdateHelper.PatchResult result) {
-        Log.i(TAG, "补丁应用成功");
-    }
-    
-    @Override
-    public void onError(String message) {
-        // 如果补丁不符合安全策略，会收到错误回调
-        // 例如："当前安全策略要求补丁必须签名！此补丁未签名，拒绝应用。"
-        Log.e(TAG, "补丁应用失败: " + message);
-    }
-});
-
-// 查询当前安全策略
-boolean requireSignature = helper.isRequireSignature();
-boolean requireEncryption = helper.isRequireEncryption();
+// 应用补丁时会自动验证签名
+helper.applyPatch(patchFile, callback);
 ```
 
-**安全策略说明：**
+**签名验证原理：**
+- 补丁生成时使用 JarSigner 生成完整的 JAR 签名（META-INF/MANIFEST.MF, .SF, .RSA）
+- 应用补丁时使用 apksig 库验证签名与 APK 签名是否匹配
+- 如果签名不匹配或被删除，补丁会被自动拒绝并清除
 
-- **签名检查**：检查补丁是否包含签名文件
-  - 支持 zip 内部签名（`signature.sig`）
-  - 支持外部签名文件（`.sig`）
-  - 如果启用 `setRequireSignature(true)`，未签名的补丁将被拒绝
+### AES 加密保护
 
-- **加密检查**：检查补丁文件名是否以 `.enc` 结尾
-  - 如果启用 `setRequireEncryption(true)`，未加密的补丁将被拒绝
-  - 加密补丁会自动解密（由 `PatchApplier` 处理）
+使用 AES-256-GCM 加密补丁内容，防止补丁被窃取或逆向分析。
 
-- **推荐配置**：
-  ```java
-  // 生产环境推荐配置
-  helper.setRequireSignature(true);  // 防止补丁被篡改
-  helper.setRequireEncryption(true); // 保护补丁内容
-  
-  // 开发/测试环境可以关闭
-  helper.setRequireSignature(false);
-  helper.setRequireEncryption(false);
-  ```
-
-**10. 配置安全策略（Demo 应用功能）**
-
-Demo 应用支持配置安全策略，强制要求补丁签名或加密：
+**使用自定义密码加密（推荐）：**
 
 ```java
-// 在 Demo 应用中点击「🛡️ 安全策略设置」按钮
-// 可以配置以下选项：
-// - 🔒 强制要求补丁签名：开启后只能应用已签名的补丁
-// - 🔐 强制要求补丁加密：开启后只能应用已加密的补丁
-
-// 在代码中使用 SharedPreferences 配置
-SharedPreferences securityPrefs = context.getSharedPreferences("security_policy", MODE_PRIVATE);
-securityPrefs.edit()
-    .putBoolean("require_signature", true)  // 强制签名
-    .putBoolean("require_encryption", true) // 强制加密
-    .apply();
-
-// 应用补丁时会自动检查安全策略
-// 如果补丁不符合策略要求，会拒绝应用并显示提示
-```
-
-**完整的签名验证流程示例：**
-
-```java
-// 在 UpdateManager 中集成签名验证
-UpdateConfig config = new UpdateConfig.Builder()
-    .serverUrl("https://example.com")
-    .appKey("your-app-key")
-    .appVersion("1.0.0")
-    .debugMode(false)  // 生产环境必须关闭调试模式
-    .build();
-
-UpdateManager.init(context, config);
-
-// 设置公钥
+// 加密补丁
 SecurityManager securityManager = new SecurityManager(context);
-securityManager.setSignaturePublicKey("你的公钥Base64字符串");
+String password = "your_secure_password";
+File encryptedPatch = securityManager.encryptPatchWithPassword(patchFile, password);
 
-// 检查更新并验证签名
-UpdateManager.getInstance().setCallback(new SimpleUpdateCallback() {
-    @Override
-    public void onCheckComplete(boolean hasUpdate, PatchInfo patchInfo) {
-        if (hasUpdate) {
-            // 下载补丁
-            UpdateManager.getInstance().downloadPatch(patchInfo, new DownloadCallback() {
-                @Override
-                public void onComplete(File patchFile) {
-                    // 验证签名
-                    String signature = patchInfo.getSignature(); // 从服务器返回的签名
-                    if (securityManager.verifySignature(patchFile, signature)) {
-                        // 签名验证通过，应用补丁
-                        UpdateManager.getInstance().applyPatch(patchInfo);
-                    } else {
-                        Log.e(TAG, "签名验证失败！");
-                    }
-                }
-            });
-        }
-    }
-});
-
-UpdateManager.getInstance().checkUpdate();
+// 应用加密补丁
+HotUpdateHelper helper = new HotUpdateHelper(context);
+helper.applyPatchWithAesPassword(encryptedPatch, password, callback);
 ```
 
-**注意事项：**
-- 🔒 **生产环境必须启用签名验证**，防止恶意补丁
-- 🔑 **私钥必须妥善保管**，只在服务器端使用
-- 📱 **公钥可以打包到 APK 中**，用于客户端验证
-- 🐛 **调试模式下可以跳过签名验证**，方便开发测试
-- ✅ **签名算法使用 SHA256withRSA**，安全可靠
-- 🔐 **敏感内容建议启用加密**，使用 AES-256-GCM 或密码加密
-- 🛡️ **推荐同时使用签名和加密**，提供最高安全级别
-- 🔑 **密码加密支持自定义密码**，客户端需要相同密码才能解密
-- ⚙️ **Demo 应用支持安全策略配置**，可强制要求签名或加密
+**使用 ZIP 密码保护（兼容性最好）：**
 
-## 🛡️ 防篡改保护（v1.3.0 新增）
+```java
+// 应用带 ZIP 密码的补丁
+HotUpdateHelper helper = new HotUpdateHelper(context);
+String zipPassword = "your_zip_password";
+helper.applyPatchWithZipPassword(patchFile, zipPassword, callback);
+```
 
-### 功能说明
+> 💡 **更多加密方式**：
+> - [Android KeyStore 加密](docs/USAGE.md#使用-keystore-加密) - 设备绑定，最安全
+> - [组合使用签名和加密](docs/USAGE.md#组合使用签名和加密) - 最高安全级别
+> - [安全最佳实践](docs/USAGE.md#安全最佳实践) - 生产环境配置建议
 
-为了防止补丁在解密后被恶意篡改，系统提供了**补丁完整性验证**和**自动恢复**功能：
+### 防篡改保护（v1.3.1 新增）
+
+系统自动提供补丁完整性验证和自动恢复功能：
 
 - ✅ **SHA-256 哈希验证**：应用补丁时计算并保存哈希值
 - ✅ **启动时验证**：每次应用启动时验证补丁完整性
-- ✅ **自动检测篡改**：检测到文件被修改时自动识别
 - ✅ **自动恢复**：从加密存储中自动恢复被篡改的补丁
-- ✅ **篡改计数**：最多允许 3 次篡改尝试
-- ✅ **安全清除**：超过限制后自动清除补丁数据
+- ✅ **篡改计数**：最多允许 3 次篡改尝试，超过后自动清除
 
-### 工作原理
+**无需额外配置**，防篡改功能已自动集成到 `PatchApplication` 和 `HotUpdateHelper` 中。
 
-```
-应用启动 (attachBaseContext)
-    ↓
-检测补丁完整性（SHA-256）
-    ↓
-┌─────────────┬─────────────┐
-│  验证通过   │  验证失败   │
-│             │             │
-│  加载补丁   │  检测篡改   │
-│             │             │
-│  正常运行   │  删除文件   │
-└─────────────┴─────────────┘
-                    ↓
-            标记需要恢复
-                    ↓
-        Application.onCreate()
-                    ↓
-        从加密存储恢复补丁
-                    ↓
-            验证恢复结果
-                    ↓
-        ┌───────────────┐
-        │  恢复成功？   │
-        └───────────────┘
-            ↓       ↓
-          成功     失败
-            ↓       ↓
-        提示重启  增加计数
-            ↓       ↓
-        下次加载  超过3次
-        恢复补丁  清除数据
-```
+> 📖 **详细说明**：[防篡改保护文档](docs/SECURITY.md)
 
-### 安全保障层级
-
-1. **下载时**：签名验证（防止网络传输被篡改）
-2. **存储时**：AES-256 加密（防止存储被窃取）
-3. **应用时**：SHA-256 哈希验证（防止解密后被篡改）✅ 新增
-4. **启动时**：完整性验证（防止运行时被篡改）✅ 新增
-5. **恢复时**：自动从加密存储恢复（自动修复）✅ 新增
-
-### 使用方式
-
-**无需额外配置**，防篡改功能已自动集成到 `PatchApplication` 和 `HotUpdateHelper` 中：
-
-```java
-// 方式一：使用 PatchApplication（自动启用）
-public class MyApplication extends PatchApplication {
-    // 自动启用防篡改保护
-}
-
-// 方式二：使用 HotUpdateHelper（自动启用）
-HotUpdateHelper helper = new HotUpdateHelper(context);
-helper.loadAppliedPatch(); // 自动验证完整性
-```
-
-### 日志示例
-
-**正常加载（验证通过）**：
-```
-D PatchApplication: ✅ Patch integrity verified: 4f2db21b81332290...
-I PatchApplication: ✅ Patch loading completed with integrity verification
-```
-
-**检测到篡改（自动恢复）**：
-```
-E PatchApplication: ⚠️ PATCH INTEGRITY CHECK FAILED!
-E PatchApplication: Expected: 4f2db21b813322904e7136432a804f6540ccb5cbb90470ea2c0ccd3bc6e47663
-E PatchApplication: Actual:   2fc7f3d53a193a527d3e521e0517bf22f4669f9afcd88d6924efbd95647ccace
-E PatchApplication: ⚠️ Patch tampered! Attempt: 1/3
-W PatchApplication: ⚠️ Patch cleared. Will attempt recovery in onCreate()
-I PatchApplication: 🔄 Attempting to recover patch from encrypted storage
-I PatchApplication: ✅ Patch recovered successfully from encrypted storage
-I PatchApplication: ⚠️ Please restart the app to load the recovered patch
-```
-
-### 相关文档
-
-- [SECURITY_IMPROVEMENT.md](SECURITY_IMPROVEMENT.md) - 详细的安全改进方案
-- [SECURITY_TEST_GUIDE.md](SECURITY_TEST_GUIDE.md) - 完整的测试指南
-- [AUTO_RECOVERY_TEST.md](AUTO_RECOVERY_TEST.md) - 自动恢复测试指南
-- [INTEGRITY_TEST_RESULT.md](INTEGRITY_TEST_RESULT.md) - 测试结果报告
-
-## 🛡️ 安全最佳实践
-
-### 开发环境
-- ✅ 可以跳过签名验证（`debugMode(true)`）
-- ✅ 可以使用未加密补丁
-- ✅ 快速迭代测试
-- ✅ 防篡改保护自动启用
-
-### 生产环境
-- ✅ **必须启用签名验证**
-- ✅ **敏感内容必须加密**
-- ✅ **使用 HTTPS 传输补丁**
-- ✅ **验证补丁 MD5/SHA256**
-- ✅ **监控补丁应用成功率**
-- ✅ **提供补丁回滚机制**
-- ✅ **防篡改保护自动启用**（v1.3.0+）
-
-### 密钥管理
-- 🔑 **私钥**: 只在服务器端使用，严格保密
-- 🔓 **公钥**: 打包在 APK 中，用于验证
-- 🔐 **加密密钥**: 使用 Android KeyStore（设备绑定）或自定义密码
-- 🔄 **密钥轮换**: 定期更新密钥对
-- 🔑 **密码管理**: 密码加密时，客户端需要相同密码才能解密
-
-### 补丁分发
-- 📡 **HTTPS**: 必须使用 HTTPS 传输
-- 🔍 **校验**: 下载后验证文件完整性
-- 📦 **签名**: 服务器端对补丁签名
-- 🔒 **加密**: 可选，保护敏感内容
-- 📊 **监控**: 记录下载和应用成功率
-
-### 错误处理
-- ❌ **签名失败**: 拒绝应用，记录日志
-- ❌ **解密失败**: 降级到未加密补丁或提示用户
-- ❌ **应用失败**: 自动回滚到原始版本
-- 📝 **日志记录**: 记录所有安全相关事件
-- 🚨 **异常上报**: 及时发现和处理问题
-
-### 方式二：使用 Demo 应用
+## 🎯 Demo 应用
 
 **下载 Demo APK：** https://github.com/706412584/Android_hotupdate/releases/tag/demo
 
 或者自己编译：
 
 ```bash
-# 安装 Demo
 ./gradlew :app:installDebug
-
-# 或使用测试 APK
-adb install test-apks/app-v1.0-dex-res.apk
 ```
 
-在 Demo 应用中：
-1. 选择基准 APK 和新 APK
-2. 点击「生成补丁」
-3. 点击「应用补丁」
-4. 热更新立即生效
+**Demo 功能：**
+1. 📱 设备端生成补丁
+2. 🔒 配置安全策略（签名验证、加密）
+3. 🔐 支持多种加密方式（KeyStore、自定义密码、ZIP 密码）
+4. 🛡️ 自动防篡改保护
+5. 🔄 补丁回滚功能
 
 ## 🔄 补丁回滚
 
-如果需要回滚到原始版本：
-
 ```java
-// 方式一：使用 HotUpdateHelper（推荐 - 最简单）
 HotUpdateHelper helper = new HotUpdateHelper(context);
 helper.clearPatch();
 Toast.makeText(context, "补丁已清除，请重启应用", Toast.LENGTH_LONG).show();
 
-// 方式二：使用 PatchStorage
-// PatchStorage patchStorage = new PatchStorage(context);
-// patchStorage.clearPatch();
-
-// 方式三：参考 demo 中的 RealHotUpdate 实现
-// RealHotUpdate hotUpdate = new RealHotUpdate(context);
-// hotUpdate.clearPatch();
-
-// 清除并自动重启应用
+// 自动重启应用
 Intent intent = context.getPackageManager()
     .getLaunchIntentForPackage(context.getPackageName());
 if (intent != null) {
@@ -741,19 +287,19 @@ if (intent != null) {
 **A:** 支持 Android 5.0+ (API 21+)，推荐 Android 7.0+ (API 24+)
 
 ### Q: 可以热更新 AndroidManifest.xml 吗？
-**A:** 不可以，这是 安卓机制 的限制，需要重新安装 APK
+**A:** 不可以，这是 Android 机制的限制，需要重新安装 APK
 
 ### Q: 资源更新为什么需要重启？
 **A:** 资源需要重新加载到 AssetManager，需要重启 Activity 才能看到新界面
 
 ### Q: 如何回滚补丁？
-**A:** 调用 `hotUpdate.clearPatch()` 然后重启应用
+**A:** 调用 `helper.clearPatch()` 然后重启应用
 
 ### Q: 如何启用签名验证？
-**A:** 使用 `SecurityManager.setSignaturePublicKey()` 设置公钥，然后在应用补丁前调用 `verifySignature()` 验证。详见[签名验证](#6-使用签名验证可选推荐生产环境使用)章节
+**A:** 使用 `helper.setRequireSignature(true)` 启用签名验证，补丁生成时需要使用与 APK 相同的签名密钥。详见[安全机制](#-安全机制)章节
 
 ### Q: 调试模式下可以跳过签名验证吗？
-**A:** 可以，在 `UpdateConfig` 中设置 `debugMode(true)` 即可跳过签名验证，但生产环境必须关闭
+**A:** 可以，使用 `helper.setRequireSignature(false)` 关闭签名验证，方便开发测试。生产环境建议开启
 
 ### Q: 支持加固的APK吗（360加固等）？
 **A:** 部分支持，建议在加固前生成补丁，加固后充分测试。详见 [常见问题 - 加固相关](docs/FAQ.md#加固相关)

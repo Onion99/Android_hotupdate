@@ -1,43 +1,62 @@
 @echo off
+chcp 65001 >nul
 setlocal enabledelayedexpansion
 
 echo ======================================
-echo Maven Central 发布工具
+echo Maven Central Publishing Tool
 echo ======================================
 echo.
 
-REM 从 gradle.properties 读取凭证
+REM Read credentials from gradle.properties
 for /f "tokens=1,2 delims==" %%a in (..\gradle.properties) do (
     if "%%a"=="ossrhUsername" set USERNAME=%%b
     if "%%a"=="ossrhPassword" set PASSWORD=%%b
 )
 
 if "%USERNAME%"=="" (
-    echo ❌ 错误：未找到 ossrhUsername
+    echo [ERROR] ossrhUsername not found
     pause
     exit /b 1
 )
 
 if "%PASSWORD%"=="" (
-    echo ❌ 错误：未找到 ossrhPassword
+    echo [ERROR] ossrhPassword not found
     pause
     exit /b 1
 )
 
-REM 生成 Base64 编码的认证令牌
+REM Read version from maven-publish.gradle
+for /f "tokens=1,2 delims==" %%a in ('findstr /C:"pomVersion = " ..\maven-publish.gradle') do (
+    set VERSION_LINE=%%b
+)
+REM Remove quotes and spaces
+set VERSION=%VERSION_LINE:'=%
+set VERSION=%VERSION: =%
+set VERSION=%VERSION:"=%
+
+if "%VERSION%"=="" (
+    echo [ERROR] Version not found in maven-publish.gradle
+    pause
+    exit /b 1
+)
+
+echo Detected version: %VERSION%
+echo.
+
+REM Generate Base64 encoded auth token
 powershell -Command "$auth = '%USERNAME%:%PASSWORD%'; $bytes = [System.Text.Encoding]::UTF8.GetBytes($auth); $base64 = [Convert]::ToBase64String($bytes); Write-Host $base64" > temp_token.txt
 set /p AUTH_TOKEN=<temp_token.txt
 del temp_token.txt
 
-echo 选择操作：
+echo Choose operation:
 echo.
-echo 1. 快速发布（推荐）- 只构建 patch-core 并上传
-echo 2. 完整发布 - 清理、构建、上传
-echo 3. 检查部署状态
-echo 4. 检查 Maven Central 同步状态
-echo 5. 清空所有部署
+echo 1. Quick Publish (Recommended) - Build patch-core only and upload
+echo 2. Full Publish - Clean, build, and upload
+echo 3. Check deployment status
+echo 4. Check Maven Central sync status
+echo 5. Clear all deployments
 echo.
-set /p CHOICE="请输入选项 (1-5): "
+set /p CHOICE="Enter option (1-5): "
 
 if "%CHOICE%"=="1" goto QUICK_PUBLISH
 if "%CHOICE%"=="2" goto FULL_PUBLISH
@@ -45,32 +64,32 @@ if "%CHOICE%"=="3" goto CHECK_STATUS
 if "%CHOICE%"=="4" goto CHECK_MAVEN
 if "%CHOICE%"=="5" goto CLEAR_DEPLOYMENTS
 
-echo 无效选项
+echo Invalid option
 pause
 exit /b 1
 
 :QUICK_PUBLISH
 echo.
 echo ========================================
-echo 快速发布（3个模块）
+echo Quick Publish (3 modules)
 echo ========================================
 echo.
-echo 发布模块：
-echo   - patch-core（核心补丁库）
-echo   - patch-generator-android（Android 补丁生成器）
-echo   - update（热更新核心库）
+echo Publishing modules:
+echo   - patch-core (Core patch library)
+echo   - patch-generator-android (Android patch generator)
+echo   - update (Hot update core library)
 echo.
-echo 1️⃣  发布到本地仓库...
+echo [1/3] Publishing to local repository...
 cd ..
 call gradlew.bat :patch-core:publishMavenPublicationToLocalRepository :patch-generator-android:publishMavenPublicationToLocalRepository :update:publishMavenPublicationToLocalRepository
 if errorlevel 1 (
-    echo ❌ 发布失败
+    echo [ERROR] Publish failed
     pause
     exit /b 1
 )
 
 echo.
-echo 2️⃣  创建 Bundle...
+echo [2/3] Creating Bundle...
 cd patch-core\build\repo
 if not exist "..\..\..\temp_bundle_build" mkdir "..\..\..\temp_bundle_build"
 xcopy /E /I /Y "io" "..\..\..\temp_bundle_build\io"
@@ -90,39 +109,39 @@ cd ..
 rmdir /s /q temp_bundle_build
 
 if not exist "maven-central\bundle.zip" (
-    echo ❌ Bundle 创建失败
+    echo [ERROR] Bundle creation failed
     pause
     exit /b 1
 )
 
-echo ✅ Bundle 已创建
+echo [SUCCESS] Bundle created
 powershell -Command "Get-Item maven-central\bundle.zip | Select-Object Name, @{Name='Size(KB)';Expression={[math]::Round($_.Length/1KB,2)}}"
 
 echo.
-echo 3️⃣  上传到 Central Portal...
+echo [3/3] Uploading to Central Portal...
 cd maven-central
 curl -X POST ^
      -H "Authorization: Bearer %AUTH_TOKEN%" ^
      -F "bundle=@bundle.zip" ^
-     "https://central.sonatype.com/api/v1/publisher/upload?name=android-hotupdate-1.2.9&publishingType=USER_MANAGED" ^
+     "https://central.sonatype.com/api/v1/publisher/upload?name=android-hotupdate-%VERSION%&publishingType=USER_MANAGED" ^
      > deployment_response.json
 
 echo.
-echo ✅ 上传完成！
+echo [SUCCESS] Upload complete!
 echo.
-echo 部署 ID:
+echo Deployment ID:
 type deployment_response.json
 echo.
 echo.
-echo 已发布模块：
-echo   - patch-core:1.2.9
-echo   - patch-generator-android:1.2.9
-echo   - update:1.2.9
+echo Published modules:
+echo   - patch-core:%VERSION%
+echo   - patch-generator-android:%VERSION%
+echo   - update:%VERSION%
 echo.
-echo 下一步：
-echo   1. 访问 https://central.sonatype.com/publishing/deployments
-echo   2. 等待验证完成（约 2-5 分钟）
-echo   3. 点击 "Publish" 发布
+echo Next steps:
+echo   1. Visit https://central.sonatype.com/publishing/deployments
+echo   2. Wait for validation (about 2-5 minutes)
+echo   3. Click "Publish" to release
 echo.
 cd ..
 pause
@@ -131,33 +150,33 @@ exit /b 0
 :FULL_PUBLISH
 echo.
 echo ========================================
-echo 完整发布（3个模块）
+echo Full Publish (3 modules)
 echo ========================================
 echo.
-echo 发布模块：
-echo   - patch-core（核心补丁库）
-echo   - patch-generator-android（Android 补丁生成器）
-echo   - update（热更新核心库）
+echo Publishing modules:
+echo   - patch-core (Core patch library)
+echo   - patch-generator-android (Android patch generator)
+echo   - update (Hot update core library)
 echo.
-echo 1️⃣  清理构建...
+echo [1/5] Cleaning build...
 cd ..
 call gradlew.bat clean
 
 echo.
-echo 2️⃣  构建项目...
+echo [2/5] Building project...
 call gradlew.bat build -x test
 
 echo.
-echo 3️⃣  发布到本地仓库...
+echo [3/5] Publishing to local repository...
 call gradlew.bat :patch-core:publishMavenPublicationToLocalRepository :patch-generator-android:publishMavenPublicationToLocalRepository :update:publishMavenPublicationToLocalRepository
 if errorlevel 1 (
-    echo ❌ 构建失败
+    echo [ERROR] Build failed
     pause
     exit /b 1
 )
 
 echo.
-echo 4️⃣  创建 Bundle...
+echo [4/5] Creating Bundle...
 cd patch-core\build\repo
 if not exist "..\..\..\temp_bundle_build" mkdir "..\..\..\temp_bundle_build"
 xcopy /E /I /Y "io" "..\..\..\temp_bundle_build\io"
@@ -177,39 +196,39 @@ cd ..
 rmdir /s /q temp_bundle_build
 
 if not exist "maven-central\bundle.zip" (
-    echo ❌ Bundle 创建失败
+    echo [ERROR] Bundle creation failed
     pause
     exit /b 1
 )
 
-echo ✅ Bundle 已创建
+echo [SUCCESS] Bundle created
 powershell -Command "Get-Item maven-central\bundle.zip | Select-Object Name, @{Name='Size(KB)';Expression={[math]::Round($_.Length/1KB,2)}}"
 
 echo.
-echo 5️⃣  上传到 Central Portal...
+echo [5/5] Uploading to Central Portal...
 cd maven-central
 curl -X POST ^
      -H "Authorization: Bearer %AUTH_TOKEN%" ^
      -F "bundle=@bundle.zip" ^
-     "https://central.sonatype.com/api/v1/publisher/upload?name=android-hotupdate-1.2.9&publishingType=USER_MANAGED" ^
+     "https://central.sonatype.com/api/v1/publisher/upload?name=android-hotupdate-%VERSION%&publishingType=USER_MANAGED" ^
      > deployment_response.json
 
 echo.
-echo ✅ 上传完成！
+echo [SUCCESS] Upload complete!
 echo.
-echo 部署 ID:
+echo Deployment ID:
 type deployment_response.json
 echo.
 echo.
-echo 已发布模块：
-echo   - patch-core:1.2.9
-echo   - patch-generator-android:1.2.9
-echo   - update:1.2.9
+echo Published modules:
+echo   - patch-core:%VERSION%
+echo   - patch-generator-android:%VERSION%
+echo   - update:%VERSION%
 echo.
-echo 下一步：
-echo   1. 访问 https://central.sonatype.com/publishing/deployments
-echo   2. 等待验证完成（约 2-5 分钟）
-echo   3. 点击 "Publish" 发布
+echo Next steps:
+echo   1. Visit https://central.sonatype.com/publishing/deployments
+echo   2. Wait for validation (about 2-5 minutes)
+echo   3. Click "Publish" to release
 echo.
 cd ..
 pause
@@ -217,15 +236,15 @@ exit /b 0
 
 :CHECK_STATUS
 echo.
-set /p DEPLOYMENT_ID="请输入部署 ID: "
+set /p DEPLOYMENT_ID="Enter deployment ID: "
 if "%DEPLOYMENT_ID%"=="" (
-    echo ❌ 部署 ID 不能为空
+    echo [ERROR] Deployment ID cannot be empty
     pause
     exit /b 1
 )
 
 echo.
-echo 正在检查部署状态...
+echo Checking deployment status...
 cd maven-central
 curl -X GET ^
      -H "Authorization: Bearer %AUTH_TOKEN%" ^
@@ -241,21 +260,21 @@ exit /b 0
 
 :CHECK_MAVEN
 echo.
-echo 正在检查 Maven Central...
-curl -s -o nul -w "%%{http_code}" "https://repo1.maven.org/maven2/io/github/706412584/patch-core/1.2.9/patch-core-1.2.9.pom" > temp_status.txt
+echo Checking Maven Central...
+curl -s -o nul -w "%%{http_code}" "https://repo1.maven.org/maven2/io/github/706412584/patch-core/%VERSION%/patch-core-%VERSION%.pom" > temp_status.txt
 set /p STATUS=<temp_status.txt
 del temp_status.txt
 
 if "%STATUS%"=="200" (
-    echo ✅ 库已在 Maven Central 上可见！
+    echo [SUCCESS] Library is visible on Maven Central!
     echo.
-    echo 使用方法：
-    echo   implementation 'io.github.706412584:patch-core:1.2.9'
+    echo Usage:
+    echo   implementation 'io.github.706412584:patch-core:%VERSION%'
     echo.
-    echo 查看：https://repo1.maven.org/maven2/io/github/706412584/patch-core/1.2.9/
+    echo View: https://repo1.maven.org/maven2/io/github/706412584/patch-core/%VERSION%/
 ) else (
-    echo ⏳ 还在同步中（通常需要 15-30 分钟）
-    echo HTTP 状态码: %STATUS%
+    echo [PENDING] Still syncing (usually takes 15-30 minutes)
+    echo HTTP status code: %STATUS%
 )
 echo.
 pause
@@ -263,23 +282,23 @@ exit /b 0
 
 :CLEAR_DEPLOYMENTS
 echo.
-echo ⚠️  警告：这将删除所有未发布的部署
-set /p CONFIRM="确认删除？(Y/N): "
+echo [WARNING] This will delete all unpublished deployments
+set /p CONFIRM="Confirm deletion? (Y/N): "
 if /i not "%CONFIRM%"=="Y" (
-    echo 已取消
+    echo Cancelled
     pause
     exit /b 0
 )
 
 echo.
-echo 正在获取部署列表...
+echo Fetching deployment list...
 cd maven-central
 curl -s -X GET ^
      -H "Authorization: Bearer %AUTH_TOKEN%" ^
      "https://central.sonatype.com/api/v1/publisher/deployments" ^
      > deployments_list.json
 
-echo 正在删除...
+echo Deleting...
 powershell -Command ^
     "$json = Get-Content deployments_list.json -Raw | ConvertFrom-Json; " ^
     "$authToken = '%AUTH_TOKEN%'; " ^
@@ -287,14 +306,14 @@ powershell -Command ^
     "foreach ($deployment in $json) { " ^
     "    $id = $deployment.deploymentId; " ^
     "    $name = $deployment.name; " ^
-    "    Write-Host \"删除: $name ($id)\"; " ^
+    "    Write-Host \"Deleting: $name ($id)\"; " ^
     "    $headers = @{'Authorization' = \"Bearer $authToken\"}; " ^
     "    try { " ^
     "        Invoke-RestMethod -Uri \"https://central.sonatype.com/api/v1/publisher/deployment/$id\" -Method Delete -Headers $headers | Out-Null; " ^
     "        $count++; " ^
     "    } catch { } " ^
     "} " ^
-    "Write-Host \"`n✅ 已删除 $count 个部署\""
+    "Write-Host \"`n[SUCCESS] Deleted $count deployments\""
 
 cd ..
 echo.
