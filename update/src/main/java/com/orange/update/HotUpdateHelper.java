@@ -511,18 +511,7 @@ public class HotUpdateHelper {
             // 漏洞修复1：如果安全策略要求签名，但补丁没有签名，拒绝加载
             if (requireSignature && !hasSignatureNow) {
                 logE("⚠️ 安全策略要求补丁必须签名，但当前补丁没有签名！");
-                
-                // 清除不符合安全策略的补丁
-                prefs.edit()
-                    .remove("applied_patch_id")
-                    .remove("applied_patch_hash")
-                    .remove("patch_had_signature")
-                    .apply();
-                
-                if (appliedFile.exists()) {
-                    appliedFile.delete();
-                }
-                
+                clearPatchCompletely(prefs, appliedFile, appliedPatchId);
                 logE("⚠️ 已清除不符合安全策略的补丁");
                 return;
             }
@@ -530,18 +519,7 @@ public class HotUpdateHelper {
             // 漏洞修复2：如果补丁应用时有签名，但现在没有了，说明被删除了
             if (hadSignatureWhenApplied && !hasSignatureNow) {
                 logE("⚠️ 安全警告：补丁签名文件被删除！这是一次攻击行为。");
-                
-                // 清除被篡改的补丁
-                prefs.edit()
-                    .remove("applied_patch_id")
-                    .remove("applied_patch_hash")
-                    .remove("patch_had_signature")
-                    .apply();
-                
-                if (appliedFile.exists()) {
-                    appliedFile.delete();
-                }
-                
+                clearPatchCompletely(prefs, appliedFile, appliedPatchId);
                 logE("⚠️ 已清除被篡改的补丁");
                 return;
             }
@@ -553,18 +531,7 @@ public class HotUpdateHelper {
                 
                 if (!signatureValid) {
                     logE("⚠️ APK 签名验证失败: " + patchSigner.getError());
-                    
-                    // 清除被篡改的补丁
-                    prefs.edit()
-                        .remove("applied_patch_id")
-                        .remove("applied_patch_hash")
-                        .remove("patch_had_signature")
-                        .apply();
-                    
-                    if (appliedFile.exists()) {
-                        appliedFile.delete();
-                    }
-                    
+                    clearPatchCompletely(prefs, appliedFile, appliedPatchId);
                     logE("⚠️ 已清除被篡改的补丁");
                     return;
                 }
@@ -800,6 +767,77 @@ public class HotUpdateHelper {
             logE("Failed to calculate SHA-256", e);
             return null;
         }
+    }
+    
+    /**
+     * 完整清除补丁（包括所有相关文件和配置）
+     * 
+     * @param prefs SharedPreferences 实例
+     * @param appliedFile 补丁文件
+     * @param patchId 补丁 ID
+     */
+    private void clearPatchCompletely(android.content.SharedPreferences prefs, java.io.File appliedFile, String patchId) {
+        // 1. 清除 SharedPreferences 中的所有补丁相关键
+        android.content.SharedPreferences.Editor editor = prefs.edit();
+        editor.remove("applied_patch_id");
+        editor.remove("applied_patch_hash");
+        editor.remove("patch_had_signature");
+        editor.remove("is_zip_password_protected");
+        editor.remove("custom_zip_password");
+        editor.remove("tamper_count");
+        
+        // 清除补丁信息
+        if (patchId != null) {
+            editor.remove("patch_info_" + patchId);
+        }
+        
+        editor.apply();
+        
+        // 2. 删除补丁文件
+        if (appliedFile != null && appliedFile.exists()) {
+            appliedFile.delete();
+            logD("✓ 删除补丁文件: " + appliedFile.getName());
+        }
+        
+        // 3. 删除合并的资源文件
+        if (appliedFile != null) {
+            java.io.File appliedDir = appliedFile.getParentFile();
+            if (appliedDir != null) {
+                java.io.File mergedResourceFile = new java.io.File(appliedDir, "merged_resources.apk");
+                if (mergedResourceFile.exists()) {
+                    mergedResourceFile.delete();
+                    logD("✓ 删除合并资源文件");
+                }
+                
+                // 删除 oat 目录
+                java.io.File oatDir = new java.io.File(appliedDir, "oat");
+                if (oatDir.exists()) {
+                    deleteDirectoryInternal(oatDir);
+                    logD("✓ 删除 oat 目录");
+                }
+            }
+        }
+        
+        // 4. 清理缓存中的临时解密文件
+        java.io.File cacheDir = context.getCacheDir();
+        if (cacheDir != null && cacheDir.exists()) {
+            java.io.File[] cacheFiles = cacheDir.listFiles();
+            if (cacheFiles != null) {
+                for (java.io.File file : cacheFiles) {
+                    String name = file.getName();
+                    if (name.startsWith("patch_decrypted_") || name.startsWith("patch_load_")) {
+                        if (file.isDirectory()) {
+                            deleteDirectoryInternal(file);
+                        } else {
+                            file.delete();
+                        }
+                        logD("✓ 清理缓存文件: " + name);
+                    }
+                }
+            }
+        }
+        
+        logI("✅ 补丁已完全清除");
     }
 
     /**
