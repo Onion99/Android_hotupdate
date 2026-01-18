@@ -43,6 +43,10 @@ set(ENGINE_SOURCES
     src/bspatch.c
     src/hash.cpp
     src/compress.cpp
+    src/crypto_impl.cpp
+    src/des_impl.cpp
+    src/jks_parser.cpp
+    src/jks_jni.cpp
 )
 
 # 创建共享库
@@ -54,7 +58,7 @@ add_library(patchengine SHARED
 # 查找 Android 日志库
 find_library(log-lib log)
 
-# 链接库
+# 链接库（不需要 OpenSSL，使用自己的加密实现）
 target_link_libraries(patchengine
     ${log-lib}
 )

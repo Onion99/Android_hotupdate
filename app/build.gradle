@@ -64,6 +64,8 @@ dependencies {
     
     // ZIP handling - 用于签名嵌入
     implementation 'net.lingala.zip4j:zip4j:2.11.5'
+    
+    // apksig 通过 update 模块传递，无需重复依赖
 
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.10.0'

@@ -20,7 +20,8 @@ local.properties
 
 # Tinker dev
 /tinker-dev/
-
+/apksig-android-master/
+/Bouncy Castle/
 # Generated files
 *.apk
 *.ap_

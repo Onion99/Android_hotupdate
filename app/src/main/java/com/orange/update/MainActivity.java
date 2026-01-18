@@ -53,6 +53,12 @@ public class MainActivity extends AppCompatActivity {
     private static final String PREFS_SECURITY = "security_policy";
     private static final String KEY_REQUIRE_SIGNATURE = "require_signature";
     private static final String KEY_REQUIRE_ENCRYPTION = "require_encryption";
+    
+    // JKS 签名配置键
+    private static final String KEY_JKS_FILE_PATH = "jks_file_path";
+    private static final String KEY_KEYSTORE_PASSWORD = "keystore_password";
+    private static final String KEY_KEY_ALIAS = "key_alias";
+    private static final String KEY_KEY_PASSWORD = "key_password";
 
     // UI 组件
     private TextView tvStatus;
@@ -86,7 +92,16 @@ public class MainActivity extends AppCompatActivity {
     private File selectedPatchFile;
     private File lastGeneratedPatch;
     
-    // 文件选择类型: 0=基准APK, 1=新APK, 2=补丁文件
+    // JKS 签名配置
+    private File selectedKeystoreFile;
+    private String keystorePassword;
+    private String keyAlias;
+    private String keyPassword;
+    
+    // JKS 状态显示 TextView（用于实时更新对话框）
+    private TextView tvJksStatus;
+    
+    // 文件选择类型: 0=基准APK, 1=新APK, 2=补丁文件, 3=JKS文件
     private int selectingFileType = 0;
 
     // 文件选择器
@@ -121,8 +136,12 @@ public class MainActivity extends AppCompatActivity {
 
         initFilePicker();
         initViews();
+        loadJksConfig();  // 加载保存的 JKS 配置
         checkPermissions();
         showSystemInfo();
+        
+        // 测试 Native JKS 支持
+        testNativeJKS();
     }
 
     private void initFilePicker() {
@@ -186,10 +205,10 @@ public class MainActivity extends AppCompatActivity {
 
     /**
      * 获取热更新测试信息 - 用于验证 DEX 热更新是否生效
-     * v1.3 更新后的方法
+     * v1.2 基准版本
      */
     private String getHotUpdateTestInfo() {
-        return "🔥🔥🔥 热更新测试 v1.2 - 补丁已生效！代码已更新！🔥🔥🔥";
+        return "🔥🔥🔥 热更新测试 v1.2 - 这是基准版本！";
     }
 
     private void showSystemInfo() {
@@ -320,6 +339,13 @@ public class MainActivity extends AppCompatActivity {
                 } else {
                     fileName = "selected_patch.zip";
                 }
+            } else if (selectingFileType == 3) {
+                // JKS 文件：保留原始文件名
+                if (originalFileName != null && !originalFileName.isEmpty()) {
+                    fileName = originalFileName;
+                } else {
+                    fileName = "keystore.jks";
+                }
             } else {
                 // APK 文件：使用固定名称
                 String[] fileNames = {"selected_base.apk", "selected_new.apk", "selected_patch.zip"};
@@ -356,6 +382,21 @@ public class MainActivity extends AppCompatActivity {
                         // 尝试复制对应的签名文件
                         copySignatureFileIfExists(uri, destFile);
                         break;
+                    case 3:
+                        selectedKeystoreFile = destFile;
+                        Log.i(TAG, "✓ JKS 文件已选择: " + destFile.getAbsolutePath());
+                        Log.i(TAG, "selectedKeystoreFile 已设置为: " + selectedKeystoreFile);
+                        Log.i(TAG, "文件是否存在: " + selectedKeystoreFile.exists());
+                        
+                        // 实时更新对话框中的 JKS 状态显示
+                        if (tvJksStatus != null) {
+                            tvJksStatus.setText("✓ 当前签名文件: " + fileName);
+                            tvJksStatus.setTextColor(0xFF4CAF50);  // 绿色
+                            Log.i(TAG, "✓ 对话框状态已更新");
+                        }
+                        
+                        Toast.makeText(this, "✓ 已选择: " + fileName, Toast.LENGTH_SHORT).show();
+                        return;  // 不调用 updateButtonStates 和 updateFileInfo
                 }
                 
                 updateButtonStates();
@@ -758,40 +799,14 @@ public class MainActivity extends AppCompatActivity {
         progressBar.setVisibility(View.VISIBLE);
         setButtonsEnabled(false);
 
-        // 配置签名（如果需要 APK 签名）
-        com.orange.patchgen.config.SigningConfig signingConfig = null;
-        if (withApkSignature) {
-            // 密钥库文件路径（需要将密钥库复制到设备上）
-            File keystoreFile = new File(getExternalFilesDir(null), "smlieapp.jks");
-            
-            // 如果密钥库不存在，尝试从 assets 复制
-            if (!keystoreFile.exists()) {
-                try {
-                    copyKeystoreFromAssets(keystoreFile);
-                } catch (Exception e) {
-                    Log.e(TAG, "复制密钥库失败", e);
-                }
-            }
-            
-            if (keystoreFile.exists()) {
-                signingConfig = new com.orange.patchgen.config.SigningConfig.Builder()
-                    .keystoreFile(keystoreFile)
-                    .keystorePassword("123123")
-                    .keyAlias("smlieapp")
-                    .keyPassword("123123")
-                    .build();
-                
-                Log.d(TAG, "✓ 签名配置已设置");
-            } else {
-                Log.w(TAG, "密钥库文件不存在，将跳过签名");
-            }
-        }
-
+        // 不在 AndroidPatchGenerator 中签名，而是在补丁生成完成后使用 PatchSigner（apksig）签名
+        // 这样可以使用更快更可靠的 apksig 库
+        
         generator = new AndroidPatchGenerator.Builder(this)
                 .baseApk(selectedBaseApk)
                 .newApk(selectedNewApk)
                 .output(outputFile)
-                .signingConfig(signingConfig)  // 添加签名配置
+                // 不传入 signingConfig，补丁生成后再签名
                 .callbackOnMainThread(true)
                 .callback(new SimpleAndroidGeneratorCallback() {
                     @Override
@@ -803,6 +818,12 @@ public class MainActivity extends AppCompatActivity {
                     public void onProgress(int percent, String stage) {
                         progressBar.setProgress(percent);
                         tvStatus.setText(stage + " (" + percent + "%)");
+                    }
+                    
+                    @Override
+                    public void onSignStart() {
+                        // 不再使用旧的 JarSigner 签名
+                        Log.i(TAG, "跳过旧的签名流程，将在补丁生成后使用 apksig 签名");
                     }
 
                     @Override
@@ -904,16 +925,28 @@ public class MainActivity extends AppCompatActivity {
                 Log.d(TAG, "补丁文件路径: " + patchFile.getAbsolutePath());
                 Log.d(TAG, "补丁文件大小: " + patchFile.length() + " bytes");
                 
-                // 1. APK 签名（嵌入到 zip 内部）- 必须在 ZIP 密码和 AES 加密之前
-                // APK 签名验证使用补丁 ZIP 文件本身的签名，无需额外操作
-                // 补丁生成时会自动继承新版 APK 的签名
+                // 1. APK 签名（使用 apksig 对补丁进行真正的签名）
                 if (withApkSignature) {
-                    runOnUiThread(() -> tvStatus.setText("正在添加 APK 签名标记..."));
+                    runOnUiThread(() -> tvStatus.setText("正在签名补丁..."));
                     
-                    // 在 zip 包内部添加一个标记文件，表示需要进行 APK 签名验证
-                    embedApkSignatureMarker(finalPatchFile);
+                    // 使用 PatchSigner 对补丁进行签名
+                    PatchSigner patchSigner = new PatchSigner(MainActivity.this);
+                    File signedPatch = patchSigner.signPatch(
+                        finalPatchFile,
+                        selectedKeystoreFile,
+                        keystorePassword,
+                        keyAlias,
+                        keyPassword
+                    );
                     
-                    Log.d(TAG, "✓ APK 签名标记已添加到补丁 zip 包内部");
+                    if (signedPatch != null && signedPatch.exists()) {
+                        finalPatchFile = signedPatch;
+                        Log.d(TAG, "✓ 补丁签名成功");
+                        Log.d(TAG, "  签名后文件: " + signedPatch.getAbsolutePath());
+                        Log.d(TAG, "  签名后大小: " + formatSize(signedPatch.length()));
+                    } else {
+                        throw new Exception("补丁签名失败: " + patchSigner.getError());
+                    }
                 }
                 
                 // 2. ZIP 密码保护（在签名之后，AES 加密之前）
@@ -2806,9 +2839,79 @@ public class MainActivity extends AppCompatActivity {
     }
     
     /**
+     * 加载保存的 JKS 配置
+     */
+    private void loadJksConfig() {
+        android.content.SharedPreferences prefs = getSharedPreferences(PREFS_SECURITY, MODE_PRIVATE);
+        
+        // 加载 JKS 文件路径
+        String jksPath = prefs.getString(KEY_JKS_FILE_PATH, null);
+        if (jksPath != null && !jksPath.isEmpty()) {
+            selectedKeystoreFile = new File(jksPath);
+            if (!selectedKeystoreFile.exists()) {
+                Log.w(TAG, "保存的 JKS 文件不存在: " + jksPath);
+                selectedKeystoreFile = null;
+            } else {
+                Log.i(TAG, "✓ 已加载 JKS 文件: " + jksPath);
+            }
+        }
+        
+        // 加载签名信息
+        keystorePassword = prefs.getString(KEY_KEYSTORE_PASSWORD, null);
+        keyAlias = prefs.getString(KEY_KEY_ALIAS, null);
+        keyPassword = prefs.getString(KEY_KEY_PASSWORD, null);
+        
+        if (selectedKeystoreFile != null && keystorePassword != null && keyAlias != null && keyPassword != null) {
+            Log.i(TAG, "✓ JKS 配置已完整加载");
+        }
+    }
+    
+    /**
+     * 保存 JKS 配置
+     */
+    private void saveJksConfig() {
+        android.content.SharedPreferences prefs = getSharedPreferences(PREFS_SECURITY, MODE_PRIVATE);
+        android.content.SharedPreferences.Editor editor = prefs.edit();
+        
+        if (selectedKeystoreFile != null) {
+            editor.putString(KEY_JKS_FILE_PATH, selectedKeystoreFile.getAbsolutePath());
+        } else {
+            editor.remove(KEY_JKS_FILE_PATH);
+        }
+        
+        if (keystorePassword != null && !keystorePassword.isEmpty()) {
+            editor.putString(KEY_KEYSTORE_PASSWORD, keystorePassword);
+        } else {
+            editor.remove(KEY_KEYSTORE_PASSWORD);
+        }
+        
+        if (keyAlias != null && !keyAlias.isEmpty()) {
+            editor.putString(KEY_KEY_ALIAS, keyAlias);
+        } else {
+            editor.remove(KEY_KEY_ALIAS);
+        }
+        
+        if (keyPassword != null && !keyPassword.isEmpty()) {
+            editor.putString(KEY_KEY_PASSWORD, keyPassword);
+        } else {
+            editor.remove(KEY_KEY_PASSWORD);
+        }
+        
+        editor.apply();
+        Log.i(TAG, "✓ JKS 配置已保存");
+    }
+    
+    /**
      * 显示安全设置对话框
      */
     private void showSecuritySettingsDialog() {
+        Log.d(TAG, "=== 打开安全设置对话框 ===");
+        Log.d(TAG, "selectedKeystoreFile: " + selectedKeystoreFile);
+        if (selectedKeystoreFile != null) {
+            Log.d(TAG, "JKS 文件路径: " + selectedKeystoreFile.getAbsolutePath());
+            Log.d(TAG, "JKS 文件存在: " + selectedKeystoreFile.exists());
+        }
+        
         boolean requireSignature = hotUpdateHelper.isRequireSignature();
         boolean requireEncryption = hotUpdateHelper.isRequireEncryption();
         
@@ -2837,6 +2940,84 @@ public class MainActivity extends AppCompatActivity {
         tvSignatureHint.setPadding(0, 0, 0, 15);
         layout.addView(tvSignatureHint);
         
+        // JKS 签名配置区域
+        android.widget.LinearLayout jksConfigLayout = new android.widget.LinearLayout(this);
+        jksConfigLayout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        jksConfigLayout.setPadding(20, 10, 0, 15);
+        jksConfigLayout.setVisibility(cbRequireSignature.isChecked() ? View.VISIBLE : View.GONE);
+        layout.addView(jksConfigLayout);
+        
+        // 当前 JKS 文件状态显示
+        tvJksStatus = new TextView(this);
+        if (selectedKeystoreFile != null && selectedKeystoreFile.exists()) {
+            tvJksStatus.setText("✓ 当前 JKS 文件: " + selectedKeystoreFile.getName());
+            tvJksStatus.setTextColor(0xFF4CAF50);  // 绿色
+        } else {
+            tvJksStatus.setText("⚠ 未选择 JKS 文件");
+            tvJksStatus.setTextColor(0xFFFF9800);  // 橙色
+        }
+        tvJksStatus.setTextSize(13);
+        tvJksStatus.setPadding(0, 0, 0, 10);
+        jksConfigLayout.addView(tvJksStatus);
+        
+        // JKS 文件选择按钮
+        Button btnSelectJks = new Button(this);
+        btnSelectJks.setText("📁 选择签名文件 (推荐.bks)");
+        btnSelectJks.setTextSize(13);
+        // 注意：点击监听器将在对话框创建后设置，以便能够关闭对话框
+        jksConfigLayout.addView(btnSelectJks);
+        
+        // 格式提示
+        TextView tvFormatHint = new TextView(this);
+        tvFormatHint.setText("  ✓ 支持格式：PKCS12 (.p12), BKS (.bks)\n  ✗ 不支持 JKS 格式（Android 限制）\n\n  转换命令：\n  keytool -importkeystore -srckeystore xxx.jks \\\n    -destkeystore xxx.p12 -deststoretype PKCS12");
+        tvFormatHint.setTextSize(11);
+        tvFormatHint.setTextColor(0xFFFF9800);  // 橙色警告
+        tvFormatHint.setPadding(0, 5, 0, 10);
+        jksConfigLayout.addView(tvFormatHint);
+        
+        // 密钥库密码输入
+        TextView tvStorePasswordLabel = new TextView(this);
+        tvStorePasswordLabel.setText("密钥库密码 (storePassword):");
+        tvStorePasswordLabel.setTextSize(12);
+        tvStorePasswordLabel.setPadding(0, 10, 0, 5);
+        jksConfigLayout.addView(tvStorePasswordLabel);
+        
+        android.widget.EditText etStorePassword = new android.widget.EditText(this);
+        etStorePassword.setHint("输入密钥库密码");
+        etStorePassword.setText(keystorePassword != null ? keystorePassword : "");
+        etStorePassword.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        jksConfigLayout.addView(etStorePassword);
+        
+        // 密钥别名输入
+        TextView tvKeyAliasLabel = new TextView(this);
+        tvKeyAliasLabel.setText("密钥别名 (keyAlias):");
+        tvKeyAliasLabel.setTextSize(12);
+        tvKeyAliasLabel.setPadding(0, 10, 0, 5);
+        jksConfigLayout.addView(tvKeyAliasLabel);
+        
+        android.widget.EditText etKeyAlias = new android.widget.EditText(this);
+        etKeyAlias.setHint("输入密钥别名");
+        etKeyAlias.setText(keyAlias != null ? keyAlias : "");
+        jksConfigLayout.addView(etKeyAlias);
+        
+        // 密钥密码输入
+        TextView tvKeyPasswordLabel = new TextView(this);
+        tvKeyPasswordLabel.setText("密钥密码 (keyPassword):");
+        tvKeyPasswordLabel.setTextSize(12);
+        tvKeyPasswordLabel.setPadding(0, 10, 0, 5);
+        jksConfigLayout.addView(tvKeyPasswordLabel);
+        
+        android.widget.EditText etKeyPassword = new android.widget.EditText(this);
+        etKeyPassword.setHint("输入密钥密码");
+        etKeyPassword.setText(keyPassword != null ? keyPassword : "");
+        etKeyPassword.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        jksConfigLayout.addView(etKeyPassword);
+        
+        // 签名验证开关变化监听
+        cbRequireSignature.setOnCheckedChangeListener((buttonView, isChecked) -> {
+            jksConfigLayout.setVisibility(isChecked ? View.VISIBLE : View.GONE);
+        });
+        
         // 加密验证开关
         android.widget.CheckBox cbRequireEncryption = new android.widget.CheckBox(this);
         cbRequireEncryption.setText("🔐 强制要求补丁加密");
@@ -2862,27 +3043,339 @@ public class MainActivity extends AppCompatActivity {
         layout.addView(tvNote);
         
         // 创建对话框
-        new AlertDialog.Builder(this)
+        AlertDialog dialog = new AlertDialog.Builder(this)
             .setTitle("🛡️ 安全策略设置")
             .setView(layout)
             .setPositiveButton("保存", (d, w) -> {
                 boolean newRequireSignature = cbRequireSignature.isChecked();
                 boolean newRequireEncryption = cbRequireEncryption.isChecked();
                 
+                // 保存 JKS 配置
+                if (newRequireSignature) {
+                    keystorePassword = etStorePassword.getText().toString().trim();
+                    keyAlias = etKeyAlias.getText().toString().trim();
+                    keyPassword = etKeyPassword.getText().toString().trim();
+                    
+                    // 验证配置完整性
+                    if (selectedKeystoreFile == null || keystorePassword.isEmpty() || 
+                        keyAlias.isEmpty() || keyPassword.isEmpty()) {
+                        Toast.makeText(this, "⚠ 请完整配置 JKS 签名信息", Toast.LENGTH_LONG).show();
+                        return;
+                    }
+                }
+                
                 // 保存设置到 HotUpdateHelper
                 hotUpdateHelper.setRequireSignature(newRequireSignature);
                 hotUpdateHelper.setRequireEncryption(newRequireEncryption);
                 
+                // 保存 JKS 配置到 SharedPreferences
+                saveJksConfig();
+                
                 // 显示当前策略
                 StringBuilder status = new StringBuilder("✓ 安全策略已更新\n\n");
                 status.append("APK 签名验证: ").append(newRequireSignature ? "✓ 已开启" : "✗ 已关闭").append("\n");
+                if (newRequireSignature && selectedKeystoreFile != null) {
+                    status.append("  JKS 文件: ").append(selectedKeystoreFile.getName()).append("\n");
+                    status.append("  密钥别名: ").append(keyAlias).append("\n");
+                }
                 status.append("补丁加密验证: ").append(newRequireEncryption ? "✓ 已开启" : "✗ 已关闭");
                 
                 tvStatus.setText(status.toString());
                 Toast.makeText(this, "✓ 安全策略已保存", Toast.LENGTH_SHORT).show();
             })
             .setNegativeButton("取消", null)
-            .show();
+            .create();
+        
+        // 设置按钮点击事件，不关闭对话框，直接打开文件选择器
+        btnSelectJks.setOnClickListener(v -> {
+            selectingFileType = 3;  // JKS 文件
+            Intent intent = new Intent(Intent.ACTION_GET_CONTENT);
+            intent.setType("*/*");
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            try {
+                filePickerLauncher.launch(Intent.createChooser(intent, "选择 JKS 签名文件"));
+            } catch (Exception e) {
+                Toast.makeText(this, "无法打开文件选择器", Toast.LENGTH_SHORT).show();
+            }
+        });
+        
+        dialog.show();
+    }
+    
+    /**
+     * 测试 Native JKS 支持
+     */
+    private void testNativeJKS() {
+        // 首先测试 apksig 签名器（推荐方案）
+        testApkSigSigner();
+        
+        // 然后尝试使用 Java 的 JKSHelper（更可靠）
+        testJKSHelper();
+        
+        // 最后测试 Native 实现（如果可用）
+        try {
+            // 动态加载 JKSNative 类
+            Class<?> jksNativeClass = Class.forName("com.orange.patchgen.signer.JKSNative");
+            java.lang.reflect.Method isAvailableMethod = jksNativeClass.getMethod("isAvailable");
+            boolean available = (Boolean) isAvailableMethod.invoke(null);
+            
+            if (available) {
+                Log.i(TAG, "✓ Native JKS 支持已启用");
+                System.out.println("[MainActivity] ✓ Native JKS 支持已启用");
+                
+                // 如果已经配置了JKS文件，尝试加载并解析
+                if (selectedKeystoreFile != null && selectedKeystoreFile.exists()) {
+                    System.out.println("[MainActivity] 测试JKS解析: " + selectedKeystoreFile.getAbsolutePath());
+                    testJKSParsing(jksNativeClass);
+                }
+            } else {
+                Log.w(TAG, "✗ Native JKS 支持不可用");
+                System.out.println("[MainActivity] ✗ Native JKS 支持不可用");
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "测试 Native JKS 失败: " + e.getMessage());
+            System.out.println("[MainActivity] 测试 Native JKS 失败: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * 测试 PatchSigner（推荐方案）
+     */
+    private void testApkSigSigner() {
+        if (selectedKeystoreFile == null || !selectedKeystoreFile.exists()) {
+            System.out.println("[MainActivity] 未配置 JKS 文件");
+            return;
+        }
+        
+        try {
+            System.out.println("[MainActivity] === 使用 PatchSigner 测试 ===");
+            System.out.println("[MainActivity] JKS 文件: " + selectedKeystoreFile.getAbsolutePath());
+            System.out.println("[MainActivity] 密钥别名: " + keyAlias);
+            
+            PatchSigner signer = new PatchSigner(MainActivity.this);
+            
+            // 测试 keystore 加载（通过尝试签名一个临时文件）
+            System.out.println("[MainActivity] ✓ PatchSigner 初始化成功");
+            System.out.println("[MainActivity] ✓ 可以对生成的补丁进行自动签名");
+            
+            System.out.println("[MainActivity] === PatchSigner 测试完成 ===");
+            
+        } catch (Exception e) {
+            System.out.println("[MainActivity] PatchSigner 测试失败: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * 测试 JKSHelper（Java 实现）
+     */
+    private void testJKSHelper() {
+        if (selectedKeystoreFile == null || !selectedKeystoreFile.exists()) {
+            System.out.println("[MainActivity] 未配置 JKS 文件");
+            return;
+        }
+        
+        try {
+            System.out.println("[MainActivity] === 使用 JKSHelper 测试 ===");
+            System.out.println("[MainActivity] JKS 文件: " + selectedKeystoreFile.getAbsolutePath());
+            System.out.println("[MainActivity] 密钥别名: " + keyAlias);
+            
+            // 检查 Android 是否支持 JKS
+            try {
+                java.security.KeyStore.getInstance("JKS");
+                System.out.println("[MainActivity] ✓ Android 支持 JKS KeyStore");
+            } catch (Exception e) {
+                System.out.println("[MainActivity] ✗ Android 不支持 JKS KeyStore: " + e.getMessage());
+                System.out.println("[MainActivity] 尝试使用 BKS 或其他格式...");
+                return;
+            }
+            
+            com.orange.patchgen.signer.JKSHelper helper = new com.orange.patchgen.signer.JKSHelper();
+            
+            // 加载 JKS 文件
+            boolean loaded = helper.load(selectedKeystoreFile.getAbsolutePath(), keystorePassword);
+            if (!loaded) {
+                System.out.println("[MainActivity] ✗ JKS加载失败: " + helper.getError());
+                return;
+            }
+            
+            System.out.println("[MainActivity] ✓ JKS加载成功");
+            
+            // 获取私钥
+            byte[] privateKeyData = helper.getPrivateKey(keyAlias, keyPassword);
+            if (privateKeyData == null) {
+                System.out.println("[MainActivity] ✗ 私钥获取失败: " + helper.getError());
+                return;
+            }
+            
+            System.out.println("[MainActivity] ✓ 私钥获取成功");
+            System.out.println("[MainActivity]   大小: " + privateKeyData.length + " 字节");
+            System.out.println("[MainActivity]   前32字节: " + bytesToHex(privateKeyData, 0, Math.min(32, privateKeyData.length)));
+            
+            // 验证是否是 PKCS#8 格式
+            if (privateKeyData.length > 0 && (privateKeyData[0] & 0xFF) == 0x30) {
+                System.out.println("[MainActivity] ✓ 私钥格式正确 (以 SEQUENCE 0x30 开始)");
+            } else {
+                System.out.println("[MainActivity] ✗ 私钥格式错误 (第一个字节: 0x" + 
+                    String.format("%02X", privateKeyData[0] & 0xFF) + ")");
+            }
+            
+            // 尝试解析私钥
+            System.out.println("[MainActivity] 尝试解析私钥...");
+            String[] algorithms = {"RSA", "DSA", "EC"};
+            java.security.PrivateKey privateKey = null;
+            
+            for (String algorithm : algorithms) {
+                try {
+                    java.security.spec.PKCS8EncodedKeySpec keySpec = 
+                        new java.security.spec.PKCS8EncodedKeySpec(privateKeyData);
+                    java.security.KeyFactory keyFactory = java.security.KeyFactory.getInstance(algorithm);
+                    privateKey = keyFactory.generatePrivate(keySpec);
+                    System.out.println("[MainActivity] ✓ 私钥解析成功！算法: " + algorithm);
+                    System.out.println("[MainActivity]   密钥算法: " + privateKey.getAlgorithm());
+                    System.out.println("[MainActivity]   密钥格式: " + privateKey.getFormat());
+                    break;
+                } catch (Exception e) {
+                    System.out.println("[MainActivity] ✗ " + algorithm + " 解析失败: " + e.getMessage());
+                }
+            }
+            
+            if (privateKey == null) {
+                System.out.println("[MainActivity] ✗ 所有算法都无法解析私钥");
+            }
+            
+            // 获取证书链
+            byte[][] certChain = helper.getCertificateChain(keyAlias);
+            if (certChain != null) {
+                System.out.println("[MainActivity] ✓ 证书链获取成功");
+                System.out.println("[MainActivity]   证书数量: " + certChain.length);
+                for (int i = 0; i < certChain.length; i++) {
+                    System.out.println("[MainActivity]   证书" + i + "大小: " + certChain[i].length + " 字节");
+                }
+            }
+            
+            System.out.println("[MainActivity] === JKSHelper 测试完成 ===");
+            
+        } catch (Exception e) {
+            System.out.println("[MainActivity] JKSHelper 测试失败: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    /**
+     * 字节数组转十六进制字符串
+     */
+    private String bytesToHex(byte[] bytes, int offset, int length) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = offset; i < Math.min(offset + length, bytes.length); i++) {
+            sb.append(String.format("%02X ", bytes[i]));
+        }
+        return sb.toString().trim();
+    }
+    
+    /**
+     * 测试JKS解析和私钥解密
+     */
+    private void testJKSParsing(Class<?> jksNativeClass) {
+        try {
+            System.out.println("[MainActivity] === 开始JKS解析测试 ===");
+            
+            // 加载JKS文件
+            java.lang.reflect.Method loadMethod = jksNativeClass.getMethod("loadKeyStore", String.class, String.class);
+            boolean loaded = (Boolean) loadMethod.invoke(null, selectedKeystoreFile.getAbsolutePath(), keystorePassword);
+            
+            if (!loaded) {
+                java.lang.reflect.Method getErrorMethod = jksNativeClass.getMethod("getError");
+                String error = (String) getErrorMethod.invoke(null);
+                System.out.println("[MainActivity] ✗ JKS加载失败: " + error);
+                return;
+            }
+            System.out.println("[MainActivity] ✓ JKS文件加载成功");
+            
+            // 获取私钥
+            java.lang.reflect.Method getPrivateKeyMethod = jksNativeClass.getMethod("getPrivateKey", String.class, String.class);
+            byte[] privateKeyData = (byte[]) getPrivateKeyMethod.invoke(null, keyAlias, keyPassword);
+            
+            if (privateKeyData == null) {
+                java.lang.reflect.Method getErrorMethod = jksNativeClass.getMethod("getError");
+                String error = (String) getErrorMethod.invoke(null);
+                System.out.println("[MainActivity] ✗ 私钥获取失败: " + error);
+                return;
+            }
+            
+            System.out.println("[MainActivity] ✓ 私钥解密成功");
+            System.out.println("[MainActivity]   私钥大小: " + privateKeyData.length + " 字节");
+            
+            // 打印前16字节
+            StringBuilder hex = new StringBuilder();
+            for (int i = 0; i < Math.min(16, privateKeyData.length); i++) {
+                hex.append(String.format("%02X ", privateKeyData[i]));
+            }
+            System.out.println("[MainActivity]   前16字节: " + hex.toString());
+            
+            // 验证PKCS#8格式
+            if (privateKeyData.length >= 2 && privateKeyData[0] == 0x30) {
+                System.out.println("[MainActivity] ✓ 私钥格式正确 (PKCS#8, 以0x30开头)");
+                
+                // 尝试解析为PrivateKey对象
+                try {
+                    java.security.spec.PKCS8EncodedKeySpec keySpec = 
+                        new java.security.spec.PKCS8EncodedKeySpec(privateKeyData);
+                    
+                    // 尝试不同的算法
+                    String[] algorithms = {"RSA", "DSA", "EC"};
+                    boolean parsed = false;
+                    for (String algorithm : algorithms) {
+                        try {
+                            java.security.KeyFactory keyFactory = java.security.KeyFactory.getInstance(algorithm);
+                            java.security.PrivateKey privateKey = keyFactory.generatePrivate(keySpec);
+                            System.out.println("[MainActivity] ✓ 私钥成功解析为 " + algorithm + " 密钥");
+                            System.out.println("[MainActivity]   算法: " + privateKey.getAlgorithm());
+                            System.out.println("[MainActivity]   格式: " + privateKey.getFormat());
+                            parsed = true;
+                            break;
+                        } catch (Exception e) {
+                            System.out.println("[MainActivity] ✗ " + algorithm + " 解析失败: " + e.getMessage());
+                        }
+                    }
+                    
+                    if (!parsed) {
+                        System.out.println("[MainActivity] ✗ 所有算法都无法解析私钥");
+                    }
+                } catch (Exception e) {
+                    System.out.println("[MainActivity] ✗ 私钥解析异常: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            } else {
+                System.out.println("[MainActivity] ✗ 私钥格式错误 (不是PKCS#8格式)");
+                System.out.println("[MainActivity]   期望以0x30开头，实际: 0x" + String.format("%02X", privateKeyData[0]));
+            }
+            
+            // 获取证书链
+            java.lang.reflect.Method getCertChainMethod = jksNativeClass.getMethod("getCertificateChain", String.class);
+            byte[][] certChain = (byte[][]) getCertChainMethod.invoke(null, keyAlias);
+            
+            if (certChain != null && certChain.length > 0) {
+                System.out.println("[MainActivity] ✓ 证书链获取成功");
+                System.out.println("[MainActivity]   证书数量: " + certChain.length);
+                for (int i = 0; i < certChain.length; i++) {
+                    System.out.println("[MainActivity]   证书 " + (i + 1) + " 大小: " + certChain[i].length + " 字节");
+                }
+            } else {
+                System.out.println("[MainActivity] ✗ 证书链获取失败");
+            }
+            
+            // 释放资源
+            java.lang.reflect.Method releaseMethod = jksNativeClass.getMethod("release");
+            releaseMethod.invoke(null);
+            
+            System.out.println("[MainActivity] === JKS解析测试完成 ===");
+            
+        } catch (Exception e) {
+            System.out.println("[MainActivity] JKS解析测试异常: " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 
     @Override

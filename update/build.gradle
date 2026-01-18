@@ -44,6 +44,16 @@ dependencies {
     // ZIP handling with password support
     implementation 'net.lingala.zip4j:zip4j:2.11.5'
     
+    // apksig for APK signing and verification (Android port)
+    implementation 'com.github.MuntashirAkon:apksig-android:4.4.0'
+    
+    // BouncyCastle for JKS keystore support
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.77'
+    implementation 'org.bouncycastle:bcpkix-jdk18on:1.77'
+    
+    // patch-core for JKSHelper
+    implementation project(':patch-core')
+    
     // Unit testing
     testImplementation 'junit:junit:4.13.2'
     

@@ -17,6 +17,7 @@ public class SigningConfig {
     private String keyAlias;
     private String keyPassword;
     private File pemFile;  // 可选，PEM 格式私钥
+    private File sourceApk;  // 可选，用于提取签名的源 APK
 
     private SigningConfig(Builder builder) {
         this.keystoreFile = builder.keystoreFile;
@@ -24,6 +25,7 @@ public class SigningConfig {
         this.keyAlias = builder.keyAlias;
         this.keyPassword = builder.keyPassword;
         this.pemFile = builder.pemFile;
+        this.sourceApk = builder.sourceApk;
     }
 
     public File getKeystoreFile() {
@@ -44,6 +46,10 @@ public class SigningConfig {
 
     public File getPemFile() {
         return pemFile;
+    }
+    
+    public File getSourceApk() {
+        return sourceApk;
     }
 
     /**
@@ -90,6 +96,7 @@ public class SigningConfig {
         private String keyAlias;
         private String keyPassword;
         private File pemFile;
+        private File sourceApk;
 
         public Builder keystoreFile(File file) {
             this.keystoreFile = file;
@@ -113,6 +120,11 @@ public class SigningConfig {
 
         public Builder pemFile(File file) {
             this.pemFile = file;
+            return this;
+        }
+        
+        public Builder sourceApk(File apk) {
+            this.sourceApk = apk;
             return this;
         }
 

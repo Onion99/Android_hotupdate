@@ -69,14 +69,14 @@ public class PatchApplication extends Application {
                 }
             }
             
-            // ✅ APK 签名验证（启动时验证）
+            // ✅ APK 签名验证（启动时验证）- 使用 apksig
             if (hasApkSignature(appliedFile)) {
                 Log.d(TAG, "检测到 APK 签名，开始验证...");
-                ApkSignatureVerifier signatureVerifier = new ApkSignatureVerifier(this);
-                boolean signatureValid = signatureVerifier.verifyPatchSignature(appliedFile);
+                PatchSigner patchSigner = new PatchSigner(this);
+                boolean signatureValid = patchSigner.verifyPatchSignatureMatchesApp(appliedFile);
                 
                 if (!signatureValid) {
-                    Log.e(TAG, "⚠️ APK 签名验证失败！补丁可能被篡改。");
+                    Log.e(TAG, "⚠️ APK 签名验证失败: " + patchSigner.getError());
                     
                     // 清除被篡改的补丁
                     prefs.edit()

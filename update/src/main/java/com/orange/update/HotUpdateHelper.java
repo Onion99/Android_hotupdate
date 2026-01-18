@@ -55,7 +55,7 @@ public class HotUpdateHelper {
     private final PatchStorage storage;
     private final PatchApplier applier;
     private final SecurityManager securityManager;
-    private final ApkSignatureVerifier signatureVerifier;
+    private final PatchSigner patchSigner;  // 使用 apksig 进行签名验证
     private final ExecutorService executor;
     private final SharedPreferences securityPrefs;
     
@@ -71,7 +71,7 @@ public class HotUpdateHelper {
     public HotUpdateHelper(Context context) {
         this.context = context.getApplicationContext();
         this.securityManager = new SecurityManager(this.context);
-        this.signatureVerifier = new ApkSignatureVerifier(this.context);
+        this.patchSigner = new PatchSigner(this.context);  // 使用 apksig
         this.storage = new PatchStorage(this.context, this.securityManager);
         this.applier = new PatchApplier(this.context, storage);
         this.executor = Executors.newSingleThreadExecutor();
@@ -452,12 +452,12 @@ public class HotUpdateHelper {
             return "当前安全策略要求补丁必须加密！此补丁未加密，拒绝应用。";
         }
         
-        // APK 签名验证（如果补丁有签名）
+        // APK 签名验证（如果补丁有签名）- 使用 apksig
         if (hasSignature) {
             Log.d(TAG, "检测到补丁签名，开始验证 APK 签名...");
-            boolean signatureValid = signatureVerifier.verifyPatchSignature(patchFile);
+            boolean signatureValid = patchSigner.verifyPatchSignatureMatchesApp(patchFile);
             if (!signatureValid) {
-                return "⚠️ APK 签名验证失败！补丁签名与应用签名不一致，拒绝应用。";
+                return "⚠️ APK 签名验证失败: " + patchSigner.getError();
             }
             Log.d(TAG, "✅ APK 签名验证通过");
         }
@@ -797,16 +797,16 @@ public class HotUpdateHelper {
             // 判断原始补丁是否是 ZIP 密码保护的
             boolean isZipPasswordProtected = isZipPasswordProtected(originalPatchFile);
             
-            // APK 签名验证（应用时再次验证）
+            // APK 签名验证（应用时再次验证）- 使用 apksig
             if (checkHasSignature(actualPatchFile)) {
                 if (callback != null) {
                     callback.onProgress(22, "验证 APK 签名...");
                 }
                 
-                boolean signatureValid = signatureVerifier.verifyPatchSignature(actualPatchFile);
+                boolean signatureValid = patchSigner.verifyPatchSignatureMatchesApp(actualPatchFile);
                 if (!signatureValid) {
                     if (callback != null) {
-                        callback.onError("⚠️ APK 签名验证失败！补丁签名与应用签名不一致。");
+                        callback.onError("⚠️ APK 签名验证失败: " + patchSigner.getError());
                     }
                     return;
                 }

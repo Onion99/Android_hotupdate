@@ -37,6 +37,10 @@ dependencies {
     // APK parsing (for reliable manifest parsing)
     implementation 'net.dongliu:apk-parser:2.6.10'
     
+    // BouncyCastle for PKCS#7 signing (works on both JVM and Android)
+    implementation 'org.bouncycastle:bcprov-jdk18on:1.77'
+    implementation 'org.bouncycastle:bcpkix-jdk18on:1.77'
+    
     // Testing
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'net.jqwik:jqwik:1.8.2'
