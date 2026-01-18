@@ -68,6 +68,32 @@ public class PatchApplication extends Application {
                     return;
                 }
             }
+            
+            // ✅ APK 签名验证（启动时验证）
+            if (hasApkSignature(appliedFile)) {
+                Log.d(TAG, "检测到 APK 签名，开始验证...");
+                ApkSignatureVerifier signatureVerifier = new ApkSignatureVerifier(this);
+                boolean signatureValid = signatureVerifier.verifyPatchSignature(appliedFile);
+                
+                if (!signatureValid) {
+                    Log.e(TAG, "⚠️ APK 签名验证失败！补丁可能被篡改。");
+                    
+                    // 清除被篡改的补丁
+                    prefs.edit()
+                        .remove("applied_patch_id")
+                        .remove("applied_patch_hash")
+                        .apply();
+                    
+                    if (appliedFile.exists()) {
+                        appliedFile.delete();
+                    }
+                    
+                    Log.e(TAG, "⚠️ 已清除被篡改的补丁");
+                    return;
+                }
+                
+                Log.d(TAG, "✅ APK 签名验证通过（启动时）");
+            }
 
             // 检查补丁是否是 ZIP 密码保护的
             java.io.File actualPatchFile = appliedFile;
@@ -326,6 +352,56 @@ public class PatchApplication extends Application {
         } catch (Exception e) {
             return false;
         }
+    }
+    
+    /**
+     * 检查补丁是否有 APK 签名
+     */
+    private boolean hasApkSignature(java.io.File patchFile) {
+        // 方法1: 检查 zip 内部是否有 META-INF/ 签名文件（新方案）
+        try {
+            java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(patchFile);
+            java.util.Enumeration<? extends java.util.zip.ZipEntry> entries = zipFile.entries();
+            
+            while (entries.hasMoreElements()) {
+                java.util.zip.ZipEntry entry = entries.nextElement();
+                String name = entry.getName();
+                
+                // 检查是否有 META-INF/ 签名文件
+                if (name.startsWith("META-INF/") && 
+                    (name.endsWith(".SF") || name.endsWith(".RSA") || 
+                     name.endsWith(".DSA") || name.endsWith(".EC"))) {
+                    zipFile.close();
+                    Log.d(TAG, "✓ 检测到 APK 签名文件: " + name);
+                    return true;
+                }
+            }
+            zipFile.close();
+        } catch (Exception e) {
+            Log.d(TAG, "检查 META-INF/ 签名失败: " + e.getMessage());
+        }
+        
+        // 方法2: 检查 zip 内部是否有 signature.sig 标记文件（向后兼容）
+        try {
+            java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(patchFile);
+            java.util.zip.ZipEntry sigEntry = zipFile.getEntry("signature.sig");
+            zipFile.close();
+            if (sigEntry != null) {
+                Log.d(TAG, "✓ 检测到 zip 内部的签名标记文件");
+                return true;
+            }
+        } catch (Exception e) {
+            Log.d(TAG, "检查 zip 内部签名标记失败: " + e.getMessage());
+        }
+        
+        // 方法3: 检查外部 .sig 文件（向后兼容）
+        java.io.File signatureFile = new java.io.File(patchFile.getPath() + ".sig");
+        if (signatureFile.exists()) {
+            Log.d(TAG, "✓ 检测到外部签名文件");
+            return true;
+        }
+        
+        return false;
     }
     
     /**

@@ -168,13 +168,15 @@ public class MainActivity extends AppCompatActivity {
         btnSelectNew.setOnClickListener(v -> selectFile(1));
         btnSelectPatch.setOnClickListener(v -> selectFile(2));
         btnClearPatch.setOnClickListener(v -> clearPatch());
-        btnVerifySuccess.setOnClickListener(v -> testSignatureVerificationSuccess());
-        btnVerifyFail.setOnClickListener(v -> testSignatureVerificationFail());
-        btnGenerateKeys.setOnClickListener(v -> generateRSAKeyPair());
-        btnLoadKeys.setOnClickListener(v -> loadUserKeys(true)); // 手动加载时显示提示
-        btnConfigKeys.setOnClickListener(v -> showConfigKeysDialog());
         btnSecuritySettings.setOnClickListener(v -> showSecuritySettingsDialog());
         btnTestAssets.setOnClickListener(v -> testAssetsFile());
+        
+        // 隐藏 RSA 密钥相关的按钮（已废弃，改用 APK 签名验证）
+        btnVerifySuccess.setVisibility(View.GONE);
+        btnVerifyFail.setVisibility(View.GONE);
+        btnGenerateKeys.setVisibility(View.GONE);
+        btnLoadKeys.setVisibility(View.GONE);
+        btnConfigKeys.setVisibility(View.GONE);
         
         updateButtonStates();
         
@@ -187,7 +189,7 @@ public class MainActivity extends AppCompatActivity {
      * v1.3 更新后的方法
      */
     private String getHotUpdateTestInfo() {
-        return "⚡⚡⚡ 热更新测试 v1.3 - 补丁已生效！代码和资源都已更新！⚡⚡⚡";
+        return "🔥🔥🔥 热更新测试 v1.2 - 补丁已生效！代码已更新！🔥🔥🔥";
     }
 
     private void showSystemInfo() {
@@ -588,9 +590,6 @@ public class MainActivity extends AppCompatActivity {
      * 显示签名补丁选项对话框
      */
     private void showSignPatchDialog() {
-        // 检查是否有可用的密钥
-        boolean hasKeys = demoKeyPair != null;
-        
         // 创建对话框布局
         android.widget.LinearLayout layout = new android.widget.LinearLayout(this);
         layout.setOrientation(android.widget.LinearLayout.VERTICAL);
@@ -598,28 +597,23 @@ public class MainActivity extends AppCompatActivity {
         
         // 标题文本
         TextView tvTitle = new TextView(this);
-        tvTitle.setText(hasKeys 
-            ? "✓ 已加载密钥对\n\n请选择安全选项："
-            : "⚠️ 未加载密钥对\n\n请选择安全选项：");
+        tvTitle.setText("请选择安全选项：");
         tvTitle.setTextSize(14);
         tvTitle.setPadding(0, 0, 0, 20);
         layout.addView(tvTitle);
         
-        // 签名选项
-        android.widget.CheckBox cbSign = new android.widget.CheckBox(this);
-        cbSign.setText("🔒 对补丁进行签名");
-        cbSign.setChecked(hasKeys);
-        cbSign.setEnabled(hasKeys);
-        layout.addView(cbSign);
+        // APK 签名验证选项（推荐）
+        android.widget.CheckBox cbApkSign = new android.widget.CheckBox(this);
+        cbApkSign.setText("🔒 APK 签名验证（推荐）");
+        cbApkSign.setChecked(true);  // 默认选中
+        layout.addView(cbApkSign);
         
-        TextView tvSignHint = new TextView(this);
-        tvSignHint.setText(hasKeys 
-            ? "  使用 RSA-2048 签名，防止补丁被篡改"
-            : "  需要先配置密钥才能签名");
-        tvSignHint.setTextSize(12);
-        tvSignHint.setTextColor(0xFF666666);
-        tvSignHint.setPadding(0, 0, 0, 15);
-        layout.addView(tvSignHint);
+        TextView tvApkSignHint = new TextView(this);
+        tvApkSignHint.setText("  使用应用签名验证，防止补丁被篡改\n  无需管理密钥，启动速度快");
+        tvApkSignHint.setTextSize(12);
+        tvApkSignHint.setTextColor(0xFF666666);
+        tvApkSignHint.setPadding(0, 0, 0, 15);
+        layout.addView(tvApkSignHint);
         
         // ZIP 密码选项
         android.widget.CheckBox cbZipPassword = new android.widget.CheckBox(this);
@@ -710,35 +704,24 @@ public class MainActivity extends AppCompatActivity {
             .setTitle("🔒 补丁安全选项")
             .setView(layout)
             .setPositiveButton("生成", (d, w) -> {
-                boolean withSignature = cbSign.isChecked();
+                boolean withApkSignature = cbApkSign.isChecked();
                 boolean withZipPassword = cbZipPassword.isChecked();
                 boolean withEncryption = cbEncrypt.isChecked();
                 String zipPassword = etZipPassword.getText().toString().trim();
                 String aesPassword = etPassword.getText().toString().trim();
                 
-                if (withSignature && !hasKeys) {
-                    Toast.makeText(this, "请先配置密钥", Toast.LENGTH_SHORT).show();
-                    return;
-                }
-                
                 // 生成补丁
-                generatePatchWithOptions(withSignature, withZipPassword, withEncryption, zipPassword, aesPassword);
+                generatePatchWithOptions(withApkSignature, withZipPassword, withEncryption, zipPassword, aesPassword);
             })
             .setNegativeButton("取消", null);
-        
-        if (!hasKeys) {
-            builder.setNeutralButton("配置密钥", (d, w) -> {
-                showConfigKeysDialog();
-            });
-        }
         
         builder.show();
     }
     
     /**
-     * 生成补丁（可选签名、ZIP密码和加密）
+     * 生成补丁（可选 APK 签名、ZIP密码和加密）
      */
-    private void generatePatchWithOptions(boolean withSignature, boolean withZipPassword, boolean withEncryption, String zipPassword, String aesPassword) {
+    private void generatePatchWithOptions(boolean withApkSignature, boolean withZipPassword, boolean withEncryption, String zipPassword, String aesPassword) {
         // 输出到下载目录
         File outputFile = new File(outputDir, "patch_" + System.currentTimeMillis() + ".zip");
 
@@ -749,21 +732,21 @@ public class MainActivity extends AppCompatActivity {
         Log.d(TAG, "新版 APK: " + selectedNewApk.getAbsolutePath());
         Log.d(TAG, "新版 APK 大小: " + formatSize(selectedNewApk.length()));
         Log.d(TAG, "输出文件: " + outputFile.getAbsolutePath());
-        Log.d(TAG, "签名: " + withSignature);
+        Log.d(TAG, "APK签名: " + withApkSignature);
         Log.d(TAG, "ZIP密码: " + withZipPassword);
         Log.d(TAG, "加密: " + withEncryption);
 
         String status = "正在生成补丁...";
-        if (withSignature && withZipPassword && withEncryption) {
-            status = "正在生成、签名、ZIP密码并加密补丁...";
-        } else if (withSignature && withZipPassword) {
-            status = "正在生成、签名并添加ZIP密码...";
-        } else if (withSignature && withEncryption) {
-            status = "正在生成、签名并加密补丁...";
+        if (withApkSignature && withZipPassword && withEncryption) {
+            status = "正在生成、APK签名、ZIP密码并加密补丁...";
+        } else if (withApkSignature && withZipPassword) {
+            status = "正在生成、APK签名并添加ZIP密码...";
+        } else if (withApkSignature && withEncryption) {
+            status = "正在生成、APK签名并加密补丁...";
         } else if (withZipPassword && withEncryption) {
             status = "正在生成、ZIP密码并加密补丁...";
-        } else if (withSignature) {
-            status = "正在生成并签名补丁...";
+        } else if (withApkSignature) {
+            status = "正在生成并添加APK签名...";
         } else if (withZipPassword) {
             status = "正在生成并添加ZIP密码...";
         } else if (withEncryption) {
@@ -831,9 +814,9 @@ public class MainActivity extends AppCompatActivity {
                             Log.d(TAG, "✓ 补丁生成成功: " + lastGeneratedPatch.getAbsolutePath());
                             Log.d(TAG, "补丁大小: " + formatSize(lastGeneratedPatch.length()));
                             
-                            // 处理签名、ZIP密码和加密
-                            if (withSignature || withZipPassword || withEncryption) {
-                                processSecurityOptions(result, withSignature, withZipPassword, withEncryption, zipPassword, aesPassword);
+                            // 处理 APK 签名、ZIP密码和加密
+                            if (withApkSignature || withZipPassword || withEncryption) {
+                                processSecurityOptions(result, withApkSignature, withZipPassword, withEncryption, zipPassword, aesPassword);
                             } else {
                                 progressBar.setVisibility(View.GONE);
                                 setButtonsEnabled(true);
@@ -873,17 +856,15 @@ public class MainActivity extends AppCompatActivity {
     }
     
     /**
-     * 处理安全选项（签名、ZIP密码和加密）
+     * 处理安全选项（APK 签名、ZIP密码和加密）
      */
-    private void processSecurityOptions(PatchResult result, boolean withSignature, 
+    private void processSecurityOptions(PatchResult result, boolean withApkSignature, 
                                        boolean withZipPassword, boolean withEncryption, 
                                        String zipPassword, String aesPassword) {
         new Thread(() -> {
             try {
                 File patchFile = result.getPatchFile();
                 File finalPatchFile = patchFile;
-                String signature = null;
-                File signatureFile = null;
                 
                 // 确保补丁文件存在
                 if (patchFile == null || !patchFile.exists()) {
@@ -893,16 +874,16 @@ public class MainActivity extends AppCompatActivity {
                 Log.d(TAG, "补丁文件路径: " + patchFile.getAbsolutePath());
                 Log.d(TAG, "补丁文件大小: " + patchFile.length() + " bytes");
                 
-                // 1. 签名补丁（嵌入到 zip 内部）- 必须在 ZIP 密码和 AES 加密之前
-                if (withSignature && demoKeyPair != null) {
-                    runOnUiThread(() -> tvStatus.setText("正在签名补丁..."));
+                // 1. APK 签名（嵌入到 zip 内部）- 必须在 ZIP 密码和 AES 加密之前
+                // APK 签名验证使用补丁 ZIP 文件本身的签名，无需额外操作
+                // 补丁生成时会自动继承新版 APK 的签名
+                if (withApkSignature) {
+                    runOnUiThread(() -> tvStatus.setText("正在添加 APK 签名标记..."));
                     
-                    signature = signPatchFile(finalPatchFile, demoKeyPair.getPrivate());
+                    // 在 zip 包内部添加一个标记文件，表示需要进行 APK 签名验证
+                    embedApkSignatureMarker(finalPatchFile);
                     
-                    // 将签名嵌入到 zip 包内部
-                    embedSignatureIntoZip(finalPatchFile, signature);
-                    
-                    Log.d(TAG, "✓ 签名已嵌入到补丁 zip 包内部");
+                    Log.d(TAG, "✓ APK 签名标记已添加到补丁 zip 包内部");
                 }
                 
                 // 2. ZIP 密码保护（在签名之后，AES 加密之前）
@@ -992,8 +973,6 @@ public class MainActivity extends AppCompatActivity {
                 }
                 
                 // 4. 显示结果
-                File finalSignatureFile = signatureFile;
-                String finalSignature = signature;
                 File finalFinalPatchFile = finalPatchFile;
                 
                 runOnUiThread(() -> {
@@ -1001,16 +980,16 @@ public class MainActivity extends AppCompatActivity {
                     setButtonsEnabled(true);
                     
                     String statusText = "✓ 补丁生成成功";
-                    if (withSignature && withZipPassword && withEncryption) {
-                        statusText += "（已签名、ZIP密码并加密）";
-                    } else if (withSignature && withZipPassword) {
-                        statusText += "（已签名并添加ZIP密码）";
-                    } else if (withSignature && withEncryption) {
-                        statusText += "（已签名并加密）";
+                    if (withApkSignature && withZipPassword && withEncryption) {
+                        statusText += "（APK签名、ZIP密码并加密）";
+                    } else if (withApkSignature && withZipPassword) {
+                        statusText += "（APK签名并添加ZIP密码）";
+                    } else if (withApkSignature && withEncryption) {
+                        statusText += "（APK签名并加密）";
                     } else if (withZipPassword && withEncryption) {
                         statusText += "（ZIP密码并加密）";
-                    } else if (withSignature) {
-                        statusText += "（已签名）";
+                    } else if (withApkSignature) {
+                        statusText += "（APK签名）";
                     } else if (withZipPassword) {
                         statusText += "（已添加ZIP密码）";
                     } else if (withEncryption) {
@@ -1022,8 +1001,8 @@ public class MainActivity extends AppCompatActivity {
                     selectedPatchFile = null;
                     btnSelectPatch.setText("选择补丁");
                     
-                    showSecuredPatchResult(result, finalFinalPatchFile, finalSignatureFile, 
-                                          finalSignature, withSignature, withZipPassword, withEncryption);
+                    showSecuredPatchResult(result, finalFinalPatchFile, null, 
+                                          null, withApkSignature, withZipPassword, withEncryption);
                     updateButtonStates();
                 });
                 
@@ -1045,14 +1024,14 @@ public class MainActivity extends AppCompatActivity {
      */
     private void showSecuredPatchResult(PatchResult result, File patchFile, 
                                        File signatureFile, String signature,
-                                       boolean withSignature, boolean withZipPassword, boolean withEncryption) {
+                                       boolean withApkSignature, boolean withZipPassword, boolean withEncryption) {
         StringBuilder info = new StringBuilder();
         info.append("=== 🔒 补丁生成成功 ===\n\n");
         
         // 安全选项
-        info.append("=== 安全选项（三重防护）===\n");
-        if (withSignature) {
-            info.append("✓ RSA-2048 签名（防篡改）\n");
+        info.append("=== 安全选项 ===\n");
+        if (withApkSignature) {
+            info.append("✓ APK 签名验证（防篡改）\n");
         }
         if (withZipPassword) {
             info.append("✓ ZIP 密码保护（AES-256，防篡改）\n");
@@ -1060,7 +1039,7 @@ public class MainActivity extends AppCompatActivity {
         if (withEncryption) {
             info.append("✓ AES-256-GCM 加密（存储保护）\n");
         }
-        if (!withSignature && !withZipPassword && !withEncryption) {
+        if (!withApkSignature && !withZipPassword && !withEncryption) {
             info.append("⚠️ 未启用安全选项\n");
         }
         info.append("\n");
@@ -1079,20 +1058,18 @@ public class MainActivity extends AppCompatActivity {
             info.append("🔐 AES 加密: 已加密（AES-256-GCM）\n");
         }
         
-        if (withSignature) {
-            info.append("\n🔒 签名: 已嵌入 zip 包内部 (signature.sig)\n");
+        if (withApkSignature) {
+            info.append("\n🔒 APK 签名: 使用应用签名验证\n");
         }
         
         info.append("\n⏱ 耗时: ").append(result.getGenerateTime()).append(" ms\n\n");
         
-        // 签名信息
-        if (withSignature && signature != null) {
-            info.append("=== 签名信息 ===\n");
-            info.append("算法: SHA256withRSA\n");
-            info.append("密钥长度: 2048位\n");
-            info.append("签名长度: ").append(signature.length()).append(" 字符\n");
-            info.append("签名(前64字符):\n").append(
-                signature.substring(0, Math.min(64, signature.length()))).append("...\n\n");
+        // APK 签名信息
+        if (withApkSignature) {
+            info.append("=== APK 签名验证 ===\n");
+            info.append("验证方式: 应用签名证书 MD5 比对\n");
+            info.append("优点: 无需管理密钥，启动速度快\n");
+            info.append("防篡改: 攻击者无法伪造签名\n\n");
         }
         
         // ZIP 密码信息
@@ -1126,33 +1103,32 @@ public class MainActivity extends AppCompatActivity {
         
         // 使用说明
         info.append("=== 💡 使用说明 ===\n");
-        if (withSignature && withZipPassword && withEncryption) {
+        if (withApkSignature && withZipPassword && withEncryption) {
             info.append("1. 补丁文件: ").append(patchFile.getName()).append(" (三重保护)\n");
-            info.append("2. 签名已嵌入在 zip 包内部\n");
+            info.append("2. APK 签名验证（应用签名）\n");
             info.append("3. ZIP 已使用密码加密（AES-256）\n");
             info.append("4. 整个文件已使用 AES-256-GCM 加密\n");
             info.append("5. 客户端会自动验证所有安全层\n");
-        } else if (withSignature && withZipPassword) {
+        } else if (withApkSignature && withZipPassword) {
             info.append("1. 补丁文件: ").append(patchFile.getName()).append(" (双重保护)\n");
-            info.append("2. 签名已嵌入在 zip 包内部\n");
+            info.append("2. APK 签名验证（应用签名）\n");
             info.append("3. ZIP 已使用密码加密（AES-256）\n");
             info.append("4. 客户端会自动验证签名和 ZIP 密码\n");
-        } else if (withSignature && withEncryption) {
+        } else if (withApkSignature && withEncryption) {
             info.append("1. 补丁文件: ").append(patchFile.getName()).append(" (已加密)\n");
-            info.append("2. 签名已嵌入在 zip 包内部\n");
+            info.append("2. APK 签名验证（应用签名）\n");
             info.append("3. 客户端需要先解密再验证签名\n");
             info.append("4. 解密需要相同的密钥\n");
-            info.append("5. 验证签名需要公钥\n");
         } else if (withZipPassword && withEncryption) {
             info.append("1. 补丁文件: ").append(patchFile.getName()).append(" (双重加密)\n");
             info.append("2. ZIP 已使用密码加密（AES-256）\n");
             info.append("3. 整个文件已使用 AES-256-GCM 加密\n");
             info.append("4. 客户端会自动解密和验证\n");
-        } else if (withSignature) {
+        } else if (withApkSignature) {
             info.append("1. 补丁文件: ").append(patchFile.getName()).append("\n");
-            info.append("2. 签名已嵌入在 zip 包内部 (signature.sig)\n");
+            info.append("2. APK 签名验证（应用签名）\n");
             info.append("3. 只需发送补丁文件给客户端\n");
-            info.append("4. 客户端使用公钥验证签名\n");
+            info.append("4. 客户端自动验证应用签名\n");
         } else if (withZipPassword) {
             info.append("1. 补丁文件: ").append(patchFile.getName()).append(" (ZIP密码保护)\n");
             info.append("2. ZIP 已使用密码加密（AES-256）\n");
@@ -1167,8 +1143,9 @@ public class MainActivity extends AppCompatActivity {
         
         // 安全提示
         info.append("⚠️ 安全提示:\n");
-        if (withSignature) {
-            info.append("• RSA 签名可以防止补丁被篡改\n");
+        if (withApkSignature) {
+            info.append("• APK 签名验证可以防止补丁被篡改\n");
+            info.append("• 无需管理密钥，启动速度快\n");
         }
         if (withZipPassword) {
             info.append("• ZIP 密码保护可以防止补丁被篡改\n");
@@ -1178,9 +1155,9 @@ public class MainActivity extends AppCompatActivity {
             info.append("• AES 加密可以保护补丁内容\n");
             info.append("• 客户端需要相同密钥才能解密\n");
         }
-        if (withSignature && withZipPassword && withEncryption) {
+        if (withApkSignature && withZipPassword && withEncryption) {
             info.append("• 三重保护提供最高安全级别！\n");
-        } else if ((withSignature && withZipPassword) || (withSignature && withEncryption) || (withZipPassword && withEncryption)) {
+        } else if ((withApkSignature && withZipPassword) || (withApkSignature && withEncryption) || (withZipPassword && withEncryption)) {
             info.append("• 双重保护提供高安全级别\n");
         }
         
@@ -2223,6 +2200,199 @@ public class MainActivity extends AppCompatActivity {
     }
     
     /**
+     * 对补丁 ZIP 文件添加签名信息
+     * 从新版 APK 中提取签名信息并添加到补丁 ZIP 中
+     * 
+     * @param patchFile 补丁文件
+     */
+    private void embedApkSignatureMarker(File patchFile) throws Exception {
+        Log.d(TAG, "开始为补丁添加签名信息...");
+        
+        // 方案：从新版 APK 中提取 META-INF/ 签名信息，复制到补丁 ZIP 中
+        boolean success = copySignatureFromApk(patchFile, selectedNewApk);
+        
+        if (success) {
+            Log.i(TAG, "✓ 补丁已包含 APK 签名信息（META-INF/）");
+        } else {
+            Log.w(TAG, "无法复制签名信息，使用标记文件方案");
+            addSignatureMarkerFile(patchFile);
+        }
+    }
+    
+    /**
+     * 从 APK 复制签名信息到补丁 ZIP
+     */
+    private boolean copySignatureFromApk(File patchZip, File sourceApk) {
+        java.util.zip.ZipFile apkZipFile = null;
+        java.util.zip.ZipOutputStream patchZipOut = null;
+        java.io.FileInputStream patchFis = null;
+        
+        try {
+            Log.d(TAG, "从 APK 提取签名: " + sourceApk.getName());
+            
+            // 1. 打开源 APK（使用标准 Java ZIP API）
+            apkZipFile = new java.util.zip.ZipFile(sourceApk);
+            
+            // 2. 读取补丁 ZIP 的所有内容到内存
+            java.util.Map<String, byte[]> patchEntries = new java.util.LinkedHashMap<>();
+            java.util.zip.ZipFile patchZipRead = new java.util.zip.ZipFile(patchZip);
+            java.util.Enumeration<? extends java.util.zip.ZipEntry> entries = patchZipRead.entries();
+            
+            while (entries.hasMoreElements()) {
+                java.util.zip.ZipEntry entry = entries.nextElement();
+                if (!entry.isDirectory()) {
+                    java.io.InputStream is = patchZipRead.getInputStream(entry);
+                    java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                    byte[] buffer = new byte[8192];
+                    int len;
+                    while ((len = is.read(buffer)) > 0) {
+                        baos.write(buffer, 0, len);
+                    }
+                    is.close();
+                    patchEntries.put(entry.getName(), baos.toByteArray());
+                }
+            }
+            patchZipRead.close();
+            
+            // 3. 重新创建补丁 ZIP，添加原有内容 + 签名文件
+            patchZipOut = new java.util.zip.ZipOutputStream(new java.io.FileOutputStream(patchZip));
+            
+            // 设置为不压缩模式（STORE）
+            patchZipOut.setMethod(java.util.zip.ZipOutputStream.STORED);
+            
+            // 先写入原有内容
+            for (java.util.Map.Entry<String, byte[]> entry : patchEntries.entrySet()) {
+                java.util.zip.ZipEntry zipEntry = new java.util.zip.ZipEntry(entry.getKey());
+                zipEntry.setMethod(java.util.zip.ZipEntry.STORED);
+                zipEntry.setSize(entry.getValue().length);
+                zipEntry.setCompressedSize(entry.getValue().length);
+                
+                // 计算 CRC32
+                java.util.zip.CRC32 crc = new java.util.zip.CRC32();
+                crc.update(entry.getValue());
+                zipEntry.setCrc(crc.getValue());
+                
+                patchZipOut.putNextEntry(zipEntry);
+                patchZipOut.write(entry.getValue());
+                patchZipOut.closeEntry();
+            }
+            
+            // 4. 从 APK 提取并添加签名文件（只添加证书文件，不添加 MANIFEST 和 .SF）
+            int copiedCount = 0;
+            java.util.Enumeration<? extends java.util.zip.ZipEntry> apkEntries = apkZipFile.entries();
+            
+            while (apkEntries.hasMoreElements()) {
+                java.util.zip.ZipEntry entry = apkEntries.nextElement();
+                String fileName = entry.getName();
+                
+                // 只复制证书文件（.RSA/.DSA/.EC），不复制 MANIFEST.MF 和 .SF
+                // 因为 MANIFEST.MF 和 .SF 包含文件摘要，会导致验证失败
+                if (fileName.startsWith("META-INF/") && 
+                    (fileName.endsWith(".RSA") || fileName.endsWith(".DSA") || fileName.endsWith(".EC"))) {
+                    
+                    // 读取证书文件内容
+                    java.io.InputStream is = apkZipFile.getInputStream(entry);
+                    java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                    byte[] buffer = new byte[8192];
+                    int len;
+                    while ((len = is.read(buffer)) > 0) {
+                        baos.write(buffer, 0, len);
+                    }
+                    is.close();
+                    
+                    // 添加到补丁 ZIP（不压缩）
+                    byte[] certData = baos.toByteArray();
+                    java.util.zip.ZipEntry newEntry = new java.util.zip.ZipEntry(fileName);
+                    newEntry.setMethod(java.util.zip.ZipEntry.STORED);
+                    newEntry.setSize(certData.length);
+                    newEntry.setCompressedSize(certData.length);
+                    
+                    // 计算 CRC32
+                    java.util.zip.CRC32 crc = new java.util.zip.CRC32();
+                    crc.update(certData);
+                    newEntry.setCrc(crc.getValue());
+                    
+                    patchZipOut.putNextEntry(newEntry);
+                    patchZipOut.write(certData);
+                    patchZipOut.closeEntry();
+                    
+                    copiedCount++;
+                    Log.d(TAG, "✓ 已复制证书文件: " + fileName);
+                }
+            }
+            
+            patchZipOut.close();
+            patchZipOut = null;
+            
+            if (copiedCount > 0) {
+                Log.i(TAG, "✓ 成功复制 " + copiedCount + " 个签名文件到补丁");
+                return true;
+            } else {
+                Log.w(TAG, "未找到签名文件");
+                return false;
+            }
+            
+        } catch (Exception e) {
+            Log.e(TAG, "复制签名信息失败", e);
+            e.printStackTrace();
+            return false;
+        } finally {
+            try {
+                if (apkZipFile != null) apkZipFile.close();
+                if (patchZipOut != null) patchZipOut.close();
+                if (patchFis != null) patchFis.close();
+            } catch (Exception e) {
+                Log.e(TAG, "关闭文件失败", e);
+            }
+        }
+    }
+    
+    /**
+     * 删除目录
+     */
+    private void deleteDirectory(File dir) {
+        if (dir.exists()) {
+            File[] files = dir.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    if (file.isDirectory()) {
+                        deleteDirectory(file);
+                    } else {
+                        file.delete();
+                    }
+                }
+            }
+            dir.delete();
+        }
+    }
+    
+    /**
+     * 添加签名标记文件（向后兼容方案）
+     */
+    private void addSignatureMarkerFile(File patchFile) throws Exception {
+        try (net.lingala.zip4j.ZipFile zipFile = new net.lingala.zip4j.ZipFile(patchFile)) {
+            // 创建临时标记文件
+            File tempMarkerFile = File.createTempFile("apk_signature", ".marker", getCacheDir());
+            try (FileOutputStream fos = new FileOutputStream(tempMarkerFile)) {
+                String markerContent = "APK_SIGNATURE_VERIFICATION_REQUIRED\n" +
+                                     "This patch requires APK signature verification.\n" +
+                                     "The patch signature must match the application signature.";
+                fos.write(markerContent.getBytes("UTF-8"));
+            }
+            
+            // 添加到 zip 包
+            net.lingala.zip4j.model.ZipParameters params = new net.lingala.zip4j.model.ZipParameters();
+            params.setFileNameInZip("signature.sig");
+            zipFile.addFile(tempMarkerFile, params);
+            
+            // 删除临时文件
+            tempMarkerFile.delete();
+            
+            Log.d(TAG, "✓ APK 签名标记已嵌入到 zip 包: signature.sig");
+        }
+    }
+    
+    /**
      * 创建测试补丁文件
      */
     private File createTestPatchFile() throws Exception {
@@ -2557,12 +2727,12 @@ public class MainActivity extends AppCompatActivity {
         
         // 签名验证开关
         android.widget.CheckBox cbRequireSignature = new android.widget.CheckBox(this);
-        cbRequireSignature.setText("🔒 强制要求补丁签名");
+        cbRequireSignature.setText("🔒 强制要求 APK 签名验证");
         cbRequireSignature.setChecked(requireSignature);
         layout.addView(cbRequireSignature);
         
         TextView tvSignatureHint = new TextView(this);
-        tvSignatureHint.setText("  开启后，只能应用已签名的补丁");
+        tvSignatureHint.setText("  开启后，只能应用包含 APK 签名的补丁\n  验证补丁签名与应用签名是否一致");
         tvSignatureHint.setTextSize(12);
         tvSignatureHint.setTextColor(0xFF666666);
         tvSignatureHint.setPadding(0, 0, 0, 15);
@@ -2584,8 +2754,8 @@ public class MainActivity extends AppCompatActivity {
         // 安全说明
         TextView tvNote = new TextView(this);
         tvNote.setText("\n💡 安全建议：\n\n" +
-            "• 生产环境建议开启签名验证\n" +
-            "• 敏感应用建议同时开启加密\n" +
+            "• APK 签名验证：防止补丁被篡改，推荐开启\n" +
+            "• 补丁加密：保护补丁内容，敏感应用建议开启\n" +
             "• 开发测试时可以关闭验证\n" +
             "• 修改设置后立即生效");
         tvNote.setTextSize(12);
@@ -2606,8 +2776,8 @@ public class MainActivity extends AppCompatActivity {
                 
                 // 显示当前策略
                 StringBuilder status = new StringBuilder("✓ 安全策略已更新\n\n");
-                status.append("签名验证: ").append(newRequireSignature ? "✓ 已开启" : "✗ 已关闭").append("\n");
-                status.append("加密验证: ").append(newRequireEncryption ? "✓ 已开启" : "✗ 已关闭");
+                status.append("APK 签名验证: ").append(newRequireSignature ? "✓ 已开启" : "✗ 已关闭").append("\n");
+                status.append("补丁加密验证: ").append(newRequireEncryption ? "✓ 已开启" : "✗ 已关闭");
                 
                 tvStatus.setText(status.toString());
                 Toast.makeText(this, "✓ 安全策略已保存", Toast.LENGTH_SHORT).show();

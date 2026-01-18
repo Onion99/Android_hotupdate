@@ -55,6 +55,7 @@ public class HotUpdateHelper {
     private final PatchStorage storage;
     private final PatchApplier applier;
     private final SecurityManager securityManager;
+    private final ApkSignatureVerifier signatureVerifier;
     private final ExecutorService executor;
     private final SharedPreferences securityPrefs;
     
@@ -70,6 +71,7 @@ public class HotUpdateHelper {
     public HotUpdateHelper(Context context) {
         this.context = context.getApplicationContext();
         this.securityManager = new SecurityManager(this.context);
+        this.signatureVerifier = new ApkSignatureVerifier(this.context);
         this.storage = new PatchStorage(this.context, this.securityManager);
         this.applier = new PatchApplier(this.context, storage);
         this.executor = Executors.newSingleThreadExecutor();
@@ -450,6 +452,16 @@ public class HotUpdateHelper {
             return "当前安全策略要求补丁必须加密！此补丁未加密，拒绝应用。";
         }
         
+        // APK 签名验证（如果补丁有签名）
+        if (hasSignature) {
+            Log.d(TAG, "检测到补丁签名，开始验证 APK 签名...");
+            boolean signatureValid = signatureVerifier.verifyPatchSignature(patchFile);
+            if (!signatureValid) {
+                return "⚠️ APK 签名验证失败！补丁签名与应用签名不一致，拒绝应用。";
+            }
+            Log.d(TAG, "✅ APK 签名验证通过");
+        }
+        
         return null;
     }
     
@@ -460,20 +472,43 @@ public class HotUpdateHelper {
      * @return 是否有签名
      */
     private boolean checkHasSignature(File patchFile) {
-        // 方法1: 检查 zip 内部是否有 signature.sig
+        // 方法1: 检查 zip 内部是否有 META-INF/ 签名文件（新方案）
+        try {
+            java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(patchFile);
+            java.util.Enumeration<? extends java.util.zip.ZipEntry> entries = zipFile.entries();
+            
+            while (entries.hasMoreElements()) {
+                java.util.zip.ZipEntry entry = entries.nextElement();
+                String name = entry.getName();
+                
+                // 检查是否有 META-INF/ 签名文件
+                if (name.startsWith("META-INF/") && 
+                    (name.endsWith(".SF") || name.endsWith(".RSA") || 
+                     name.endsWith(".DSA") || name.endsWith(".EC"))) {
+                    zipFile.close();
+                    Log.d(TAG, "✓ 检测到 APK 签名文件: " + name);
+                    return true;
+                }
+            }
+            zipFile.close();
+        } catch (Exception e) {
+            Log.d(TAG, "检查 META-INF/ 签名失败: " + e.getMessage());
+        }
+        
+        // 方法2: 检查 zip 内部是否有 signature.sig 标记文件（向后兼容）
         try {
             java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(patchFile);
             java.util.zip.ZipEntry sigEntry = zipFile.getEntry("signature.sig");
             zipFile.close();
             if (sigEntry != null) {
-                Log.d(TAG, "✓ 检测到 zip 内部的签名文件");
+                Log.d(TAG, "✓ 检测到 zip 内部的签名标记文件");
                 return true;
             }
         } catch (Exception e) {
-            Log.d(TAG, "检查 zip 内部签名失败: " + e.getMessage());
+            Log.d(TAG, "检查 zip 内部签名标记失败: " + e.getMessage());
         }
         
-        // 方法2: 检查外部 .sig 文件（向后兼容）
+        // 方法3: 检查外部 .sig 文件（向后兼容）
         File signatureFile = new File(patchFile.getPath() + ".sig");
         if (signatureFile.exists()) {
             Log.d(TAG, "✓ 检测到外部签名文件");
@@ -761,6 +796,23 @@ public class HotUpdateHelper {
             
             // 判断原始补丁是否是 ZIP 密码保护的
             boolean isZipPasswordProtected = isZipPasswordProtected(originalPatchFile);
+            
+            // APK 签名验证（应用时再次验证）
+            if (checkHasSignature(actualPatchFile)) {
+                if (callback != null) {
+                    callback.onProgress(22, "验证 APK 签名...");
+                }
+                
+                boolean signatureValid = signatureVerifier.verifyPatchSignature(actualPatchFile);
+                if (!signatureValid) {
+                    if (callback != null) {
+                        callback.onError("⚠️ APK 签名验证失败！补丁签名与应用签名不一致。");
+                    }
+                    return;
+                }
+                
+                Log.d(TAG, "✅ APK 签名验证通过（应用时）");
+            }
             
             // 3. 创建 PatchInfo
             PatchInfo patchInfo = createPatchInfo(actualPatchFile);
