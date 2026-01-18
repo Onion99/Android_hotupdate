@@ -6,5 +6,5 @@ before_install:
 env:
   JITPACK: true
 install:
-  - echo "Running custom install command"
-  - ./gradlew clean build publishToMavenLocal -x test -x signMavenPublication -x signPatch-corePublication -x signUpdatePublication -x signPatch-generator-androidPublication
+  - echo "Running JitPack build"
+  - ./gradlew clean build publishToMavenLocal -x test --no-daemon
