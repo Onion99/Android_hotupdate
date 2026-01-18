@@ -91,9 +91,20 @@ public class ApkSignatureVerifier {
     }
     
     /**
-     * 验证补丁文件的签名
+     * 验证补丁文件的签名（使用 JarFile，参考 Tinker 的实现）
      * 
-     * @param patchFile 补丁文件（ZIP 格式）
+     * Tinker 的做法：
+     * 1. 使用 JarFile 读取补丁文件
+     * 2. 遍历所有条目，调用 getCertificates() 获取证书
+     * 3. JarFile 会自动验证签名，如果文件被篡改，getCertificates() 返回 null
+     * 4. 比对证书的 MD5/SHA1 与应用签名是否一致
+     * 
+     * 关键点：
+     * - 必须先读取条目内容，getCertificates() 才会返回证书
+     * - 如果签名无效或文件被篡改，getCertificates() 返回 null
+     * - 这提供了完整的防篡改保护
+     * 
+     * @param patchFile 补丁文件（ZIP 格式，带 JAR 签名）
      * @return true 如果签名验证通过，false 否则
      */
     public boolean verifyPatchSignature(File patchFile) {
@@ -113,75 +124,63 @@ public class ApkSignatureVerifier {
         }
         
         Log.i(TAG, "Verifying patch signature: " + patchFile.getName());
+        Log.i(TAG, "App signature MD5: " + sAppSignatureMd5);
+        Log.i(TAG, "App signature SHA1: " + sAppSignatureSha1);
         
-        java.util.zip.ZipFile zipFile = null;
+        JarFile jarFile = null;
         try {
-            zipFile = new java.util.zip.ZipFile(patchFile);
-            java.util.Enumeration<? extends java.util.zip.ZipEntry> entries = zipFile.entries();
+            // 使用 JarFile 读取补丁（会自动验证签名）
+            jarFile = new JarFile(patchFile);
+            Enumeration<JarEntry> entries = jarFile.entries();
             
+            boolean hasValidEntry = false;
             boolean hasValidCertificate = false;
             
-            // 查找并验证证书文件
+            // 遍历所有条目
             while (entries.hasMoreElements()) {
-                java.util.zip.ZipEntry entry = entries.nextElement();
-                String name = entry.getName();
+                JarEntry entry = entries.nextElement();
                 
-                // 查找证书文件（.RSA/.DSA/.EC）
-                if (name.startsWith("META-INF/") && 
-                    (name.endsWith(".RSA") || name.endsWith(".DSA") || name.endsWith(".EC"))) {
-                    
-                    Log.d(TAG, "Found certificate file: " + name);
-                    
-                    // 读取证书文件
-                    java.io.InputStream is = zipFile.getInputStream(entry);
-                    java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
-                    byte[] buffer = new byte[8192];
-                    int len;
-                    while ((len = is.read(buffer)) > 0) {
-                        baos.write(buffer, 0, len);
-                    }
-                    is.close();
-                    
-                    // 解析 PKCS#7 签名块，提取证书
-                    byte[] pkcs7Bytes = baos.toByteArray();
-                    
-                    try {
-                        // 方法1: 使用 JarFile 的方式解析 PKCS#7（推荐）
-                        java.security.cert.Certificate[] certs = loadCertificatesFromPKCS7(pkcs7Bytes);
-                        
-                        if (certs != null && certs.length > 0) {
-                            // 验证证书（使用 SHA1 和 MD5 双重验证）
-                            for (java.security.cert.Certificate cert : certs) {
-                                byte[] encodedCert = cert.getEncoded();
-                                String certMd5 = getMD5(encodedCert);
-                                String certSha1 = getSHA1(encodedCert);
-                                
-                                Log.d(TAG, "Certificate MD5: " + (certMd5 != null ? certMd5 : "null"));
-                                Log.d(TAG, "Certificate SHA1: " + (certSha1 != null ? certSha1 : "null"));
-                                
-                                // 使用 SHA1 作为主要验证方式（更可靠）
-                                if (certSha1 != null && sAppSignatureSha1.equals(certSha1)) {
-                                    Log.i(TAG, "✓ Certificate matched (SHA1): " + certSha1);
-                                    hasValidCertificate = true;
-                                    break;
-                                }
-                                
-                                // MD5 作为备用验证方式
-                                if (certMd5 != null && sAppSignatureMd5.equals(certMd5)) {
-                                    Log.i(TAG, "✓ Certificate matched (MD5): " + certMd5);
-                                    hasValidCertificate = true;
-                                    break;
-                                }
-                            }
-                        }
-                    } catch (Exception e) {
-                        Log.w(TAG, "Failed to parse certificate from " + name, e);
-                    }
-                    
-                    if (hasValidCertificate) {
-                        break;
-                    }
+                // 跳过目录和 META-INF/ 文件
+                if (entry.isDirectory() || entry.getName().startsWith("META-INF/")) {
+                    continue;
                 }
+                
+                // 读取条目内容（必须读取才能触发签名验证）
+                java.io.InputStream is = jarFile.getInputStream(entry);
+                byte[] buffer = new byte[8192];
+                while (is.read(buffer) > 0) {
+                    // 只需要读取，不需要处理内容
+                }
+                is.close();
+                
+                // 获取证书（如果签名有效）
+                Certificate[] certs = entry.getCertificates();
+                
+                if (certs == null || certs.length == 0) {
+                    // 没有证书或签名无效
+                    Log.e(TAG, "❌ Entry has no valid certificate: " + entry.getName());
+                    Log.e(TAG, "   This means either:");
+                    Log.e(TAG, "   1. The patch is not signed");
+                    Log.e(TAG, "   2. The signature is invalid");
+                    Log.e(TAG, "   3. The file has been tampered with");
+                    return false;
+                }
+                
+                hasValidEntry = true;
+                
+                // 验证证书是否与应用签名一致
+                if (checkCertificate(patchFile, certs)) {
+                    hasValidCertificate = true;
+                    Log.d(TAG, "✓ Entry verified: " + entry.getName());
+                } else {
+                    Log.e(TAG, "❌ Certificate mismatch for entry: " + entry.getName());
+                    return false;
+                }
+            }
+            
+            if (!hasValidEntry) {
+                Log.e(TAG, "❌ Patch has no valid entries to verify");
+                return false;
             }
             
             if (!hasValidCertificate) {
@@ -190,17 +189,19 @@ public class ApkSignatureVerifier {
             }
             
             Log.i(TAG, "✅ Patch signature verification passed");
+            Log.i(TAG, "   All entries are signed with the same certificate as the app");
+            Log.i(TAG, "   Content integrity is guaranteed by JAR signature");
             return true;
             
         } catch (Exception e) {
             Log.e(TAG, "❌ Patch signature verification failed: " + e.getMessage(), e);
             return false;
         } finally {
-            if (zipFile != null) {
+            if (jarFile != null) {
                 try {
-                    zipFile.close();
+                    jarFile.close();
                 } catch (IOException e) {
-                    Log.w(TAG, "Failed to close zip file", e);
+                    Log.w(TAG, "Failed to close jar file", e);
                 }
             }
         }
@@ -302,118 +303,5 @@ public class ApkSignatureVerifier {
      */
     public String getAppSignatureMd5() {
         return sAppSignatureMd5;
-    }
-    
-    /**
-     * 从 PKCS#7 签名块中提取证书
-     * 
-     * PKCS#7 格式（.RSA/.DSA/.EC 文件）包含：
-     * - 签名数据
-     * - 证书链
-     * - 其他元数据
-     * 
-     * 我们需要正确解析这个格式来提取证书
-     * 
-     * @param pkcs7Bytes PKCS#7 签名块的字节数据
-     * @return 证书数组，如果解析失败返回 null
-     */
-    private java.security.cert.Certificate[] loadCertificatesFromPKCS7(byte[] pkcs7Bytes) {
-        try {
-            // 使用 CertificateFactory 解析 PKCS#7
-            java.security.cert.CertificateFactory certFactory = 
-                java.security.cert.CertificateFactory.getInstance("X.509");
-            
-            // 尝试方法1: 直接解析 PKCS#7（可能包含多个证书）
-            try {
-                java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(pkcs7Bytes);
-                java.util.Collection<? extends java.security.cert.Certificate> certs = 
-                    certFactory.generateCertificates(bais);
-                
-                if (certs != null && !certs.isEmpty()) {
-                    Log.d(TAG, "✓ 成功解析 PKCS#7，找到 " + certs.size() + " 个证书");
-                    return certs.toArray(new java.security.cert.Certificate[0]);
-                }
-            } catch (Exception e) {
-                Log.d(TAG, "方法1失败，尝试方法2: " + e.getMessage());
-            }
-            
-            // 尝试方法2: 使用 CMSSignedData 解析（需要 Bouncy Castle 或 JDK 内置支持）
-            // 注意：Android 可能不支持这个方法，但我们可以尝试
-            try {
-                // 检查是否是 PKCS#7 格式（以 0x30 开头的 DER 编码）
-                if (pkcs7Bytes.length > 0 && (pkcs7Bytes[0] & 0xFF) == 0x30) {
-                    // 尝试使用反射调用 sun.security.pkcs.PKCS7（仅 JDK 可用）
-                    // Android 上可能不可用，但不会抛出异常
-                    Class<?> pkcs7Class = Class.forName("sun.security.pkcs.PKCS7");
-                    java.lang.reflect.Constructor<?> constructor = pkcs7Class.getConstructor(byte[].class);
-                    Object pkcs7 = constructor.newInstance((Object) pkcs7Bytes);
-                    
-                    java.lang.reflect.Method getCertificatesMethod = pkcs7Class.getMethod("getCertificates");
-                    java.security.cert.X509Certificate[] certs = 
-                        (java.security.cert.X509Certificate[]) getCertificatesMethod.invoke(pkcs7);
-                    
-                    if (certs != null && certs.length > 0) {
-                        Log.d(TAG, "✓ 使用 PKCS7 类解析成功，找到 " + certs.length + " 个证书");
-                        return certs;
-                    }
-                }
-            } catch (ClassNotFoundException e) {
-                Log.d(TAG, "sun.security.pkcs.PKCS7 不可用（Android 环境）");
-            } catch (Exception e) {
-                Log.d(TAG, "方法2失败: " + e.getMessage());
-            }
-            
-            // 尝试方法3: 手动解析 DER 编码的证书（最后的备用方案）
-            // 在 PKCS#7 中查找证书的 DER 编码序列
-            try {
-                java.util.List<java.security.cert.Certificate> certList = new java.util.ArrayList<>();
-                
-                // 简单的 DER 解析：查找证书序列标记 (0x30 0x82)
-                for (int i = 0; i < pkcs7Bytes.length - 4; i++) {
-                    // 查找证书开始标记：SEQUENCE (0x30) + 长度编码
-                    if ((pkcs7Bytes[i] & 0xFF) == 0x30 && (pkcs7Bytes[i + 1] & 0xFF) == 0x82) {
-                        // 读取长度（2字节，大端序）
-                        int length = ((pkcs7Bytes[i + 2] & 0xFF) << 8) | (pkcs7Bytes[i + 3] & 0xFF);
-                        
-                        // 验证长度是否合理（证书通常在 500-4000 字节之间）
-                        if (length > 400 && length < 10000 && i + 4 + length <= pkcs7Bytes.length) {
-                            try {
-                                // 提取证书数据（包括 SEQUENCE 标记）
-                                byte[] certBytes = new byte[4 + length];
-                                System.arraycopy(pkcs7Bytes, i, certBytes, 0, certBytes.length);
-                                
-                                // 尝试解析为证书
-                                java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(certBytes);
-                                java.security.cert.Certificate cert = certFactory.generateCertificate(bais);
-                                
-                                if (cert != null) {
-                                    certList.add(cert);
-                                    Log.d(TAG, "✓ 手动解析找到证书，偏移: " + i + ", 长度: " + length);
-                                    
-                                    // 跳过已解析的证书
-                                    i += 4 + length - 1;
-                                }
-                            } catch (Exception e) {
-                                // 不是有效的证书，继续搜索
-                            }
-                        }
-                    }
-                }
-                
-                if (!certList.isEmpty()) {
-                    Log.d(TAG, "✓ 手动解析成功，找到 " + certList.size() + " 个证书");
-                    return certList.toArray(new java.security.cert.Certificate[0]);
-                }
-            } catch (Exception e) {
-                Log.d(TAG, "方法3失败: " + e.getMessage());
-            }
-            
-            Log.w(TAG, "所有解析方法都失败了");
-            return null;
-            
-        } catch (Exception e) {
-            Log.e(TAG, "解析 PKCS#7 失败", e);
-            return null;
-        }
     }
 }

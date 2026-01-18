@@ -47,7 +47,8 @@ public class PatchSigner {
     /**
      * 对补丁文件签名
      * 
-     * 签名文件将被添加到补丁 zip 文件中作为 signature.sig
+     * 使用完整的 JAR 签名格式（MANIFEST.MF + .SF + .RSA），
+     * 使补丁可以通过 JarFile.getCertificates() 验证。
      * 
      * @param patchFile 补丁文件
      * @throws SigningException 签名失败时抛出
@@ -58,20 +59,12 @@ public class PatchSigner {
         }
 
         try {
-            // 加载私钥
-            PrivateKey key = loadPrivateKey();
+            // 使用 JarSigner 生成完整的 JAR 签名
+            JarSigner jarSigner = new JarSigner(config);
+            jarSigner.sign(patchFile);
             
-            // 读取补丁文件内容
-            byte[] patchContent = Files.readAllBytes(patchFile.toPath());
-            
-            // 生成签名
-            byte[] signature = generateSignature(patchContent, key);
-            
-            // 将签名写入补丁文件
-            addSignatureToZip(patchFile, signature);
-            
-        } catch (IOException e) {
-            throw new SigningException("Failed to read patch file: " + e.getMessage(), e);
+        } catch (JarSigner.SigningException e) {
+            throw new SigningException("Failed to sign patch file: " + e.getMessage(), e);
         }
     }
 

@@ -758,10 +758,40 @@ public class MainActivity extends AppCompatActivity {
         progressBar.setVisibility(View.VISIBLE);
         setButtonsEnabled(false);
 
+        // 配置签名（如果需要 APK 签名）
+        com.orange.patchgen.config.SigningConfig signingConfig = null;
+        if (withApkSignature) {
+            // 密钥库文件路径（需要将密钥库复制到设备上）
+            File keystoreFile = new File(getExternalFilesDir(null), "smlieapp.jks");
+            
+            // 如果密钥库不存在，尝试从 assets 复制
+            if (!keystoreFile.exists()) {
+                try {
+                    copyKeystoreFromAssets(keystoreFile);
+                } catch (Exception e) {
+                    Log.e(TAG, "复制密钥库失败", e);
+                }
+            }
+            
+            if (keystoreFile.exists()) {
+                signingConfig = new com.orange.patchgen.config.SigningConfig.Builder()
+                    .keystoreFile(keystoreFile)
+                    .keystorePassword("123123")
+                    .keyAlias("smlieapp")
+                    .keyPassword("123123")
+                    .build();
+                
+                Log.d(TAG, "✓ 签名配置已设置");
+            } else {
+                Log.w(TAG, "密钥库文件不存在，将跳过签名");
+            }
+        }
+
         generator = new AndroidPatchGenerator.Builder(this)
                 .baseApk(selectedBaseApk)
                 .newApk(selectedNewApk)
                 .output(outputFile)
+                .signingConfig(signingConfig)  // 添加签名配置
                 .callbackOnMainThread(true)
                 .callback(new SimpleAndroidGeneratorCallback() {
                     @Override
@@ -1215,28 +1245,8 @@ public class MainActivity extends AppCompatActivity {
         
         boolean isEncrypted = patchToApply.getName().endsWith(".enc");
         
-        // 检查签名（优先检查 zip 内部）
-        boolean hasSignature = false;
-        String signatureSource = null;
-        
-        // 方法1: 检查 zip 内部是否有 signature.sig
-        try (net.lingala.zip4j.ZipFile zipFile = new net.lingala.zip4j.ZipFile(patchToApply)) {
-            if (zipFile.getFileHeader("signature.sig") != null) {
-                hasSignature = true;
-                signatureSource = "zip内部";
-                Log.d(TAG, "✓ 检测到 zip 内部的签名文件");
-            }
-        } catch (Exception e) {
-            Log.d(TAG, "检查 zip 内部签名失败: " + e.getMessage());
-        }
-        
-        // 方法2: 检查外部 .sig 文件（向后兼容）
-        File signatureFile = new File(patchToApply.getPath() + ".sig");
-        if (!hasSignature && signatureFile.exists()) {
-            hasSignature = true;
-            signatureSource = "外部文件";
-            Log.d(TAG, "✓ 检测到外部签名文件");
-        }
+        // 检查 APK 签名（检查 META-INF/ 签名文件）
+        boolean hasSignature = checkHasApkSignature(patchToApply);
         
         Log.d(TAG, "安全策略 - 要求签名: " + requireSignature + ", 要求加密: " + requireEncryption);
         Log.d(TAG, "补丁状态 - 已加密: " + isEncrypted + ", 有签名: " + hasSignature);
@@ -1245,13 +1255,12 @@ public class MainActivity extends AppCompatActivity {
         if (requireSignature && !hasSignature) {
             new AlertDialog.Builder(this)
                 .setTitle("⚠️ 安全策略限制")
-                .setMessage("当前安全策略要求补丁必须签名！\n\n" +
-                           "此补丁未签名，拒绝应用。\n\n" +
+                .setMessage("当前安全策略要求补丁必须包含 APK 签名！\n\n" +
+                           "此补丁未包含 APK 签名，拒绝应用。\n\n" +
                            "补丁文件: " + patchToApply.getName() + "\n\n" +
                            "解决方法：\n" +
-                           "1. 使用已签名的补丁（签名应嵌入在 zip 包内）\n" +
-                           "2. 或确保外部签名文件存在: " + patchToApply.getName() + ".sig\n" +
-                           "3. 或在设置中关闭签名验证要求")
+                           "1. 重新生成补丁，并选择「APK 签名验证」选项\n" +
+                           "2. 或在安全设置中关闭签名验证要求")
                 .setPositiveButton("确定", null)
                 .setNeutralButton("安全设置", (d, w) -> showSecuritySettingsDialog())
                 .setIcon(android.R.drawable.ic_dialog_alert)
@@ -1270,16 +1279,10 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // 检查是否有签名文件
-        if (hasSignature) {
-            Log.d(TAG, "检测到签名文件，需要验证签名");
-            // 有签名文件，需要先验证签名
-            verifyAndApplyPatch(patchToApply, signatureFile);
-        } else {
-            // 没有签名文件，直接处理
-            Log.d(TAG, "没有签名文件，跳过签名验证");
-            proceedWithPatch(patchToApply);
-        }
+        // 无论是否有签名，都直接应用补丁
+        // HotUpdateHelper 会自动处理 APK 签名验证
+        Log.d(TAG, hasSignature ? "未加密补丁，直接应用" : "未加密补丁，直接应用");
+        proceedWithPatch(patchToApply);
     }
     
     /**
@@ -2200,22 +2203,118 @@ public class MainActivity extends AppCompatActivity {
     }
     
     /**
-     * 对补丁 ZIP 文件添加签名信息
-     * 从新版 APK 中提取签名信息并添加到补丁 ZIP 中
+     * 检查补丁是否包含 APK 签名（META-INF/ 签名文件）
+     * 
+     * @param patchFile 补丁文件
+     * @return 是否包含 APK 签名
+     */
+    private boolean checkHasApkSignature(File patchFile) {
+        // 方法1: 检查 zip 内部是否有 META-INF/ 签名文件（新方案）
+        try {
+            java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(patchFile);
+            java.util.Enumeration<? extends java.util.zip.ZipEntry> entries = zipFile.entries();
+            
+            while (entries.hasMoreElements()) {
+                java.util.zip.ZipEntry entry = entries.nextElement();
+                String name = entry.getName();
+                
+                // 检查是否有 META-INF/ 签名文件
+                if (name.startsWith("META-INF/") && 
+                    (name.endsWith(".SF") || name.endsWith(".RSA") || 
+                     name.endsWith(".DSA") || name.endsWith(".EC"))) {
+                    zipFile.close();
+                    Log.d(TAG, "✓ 检测到 APK 签名文件: " + name);
+                    return true;
+                }
+            }
+            zipFile.close();
+        } catch (Exception e) {
+            Log.d(TAG, "检查 META-INF/ 签名失败: " + e.getMessage());
+        }
+        
+        // 方法2: 检查 zip 内部是否有 signature.sig 标记文件（向后兼容）
+        try {
+            java.util.zip.ZipFile zipFile = new java.util.zip.ZipFile(patchFile);
+            java.util.zip.ZipEntry sigEntry = zipFile.getEntry("signature.sig");
+            zipFile.close();
+            if (sigEntry != null) {
+                Log.d(TAG, "✓ 检测到 zip 内部的签名标记文件");
+                return true;
+            }
+        } catch (Exception e) {
+            Log.d(TAG, "检查 zip 内部签名标记失败: " + e.getMessage());
+        }
+        
+        // 方法3: 检查外部 .sig 文件（向后兼容）
+        File signatureFile = new File(patchFile.getPath() + ".sig");
+        if (signatureFile.exists()) {
+            Log.d(TAG, "✓ 检测到外部签名文件");
+            return true;
+        }
+        
+        return false;
+    }
+    
+    /**
+     * 从 assets 复制密钥库文件到设备
+     */
+    private void copyKeystoreFromAssets(File destFile) throws Exception {
+        // 尝试从多个位置复制密钥库
+        // 1. 从 assets 目录
+        try {
+            java.io.InputStream is = getAssets().open("smlieapp.jks");
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(destFile);
+            byte[] buffer = new byte[8192];
+            int len;
+            while ((len = is.read(buffer)) > 0) {
+                fos.write(buffer, 0, len);
+            }
+            fos.close();
+            is.close();
+            Log.d(TAG, "✓ 从 assets 复制密钥库成功");
+            return;
+        } catch (Exception e) {
+            Log.d(TAG, "从 assets 复制失败: " + e.getMessage());
+        }
+        
+        // 2. 从下载目录复制
+        File downloadKeystore = new File(Environment.getExternalStoragePublicDirectory(
+            Environment.DIRECTORY_DOWNLOADS), "smlieapp.jks");
+        if (downloadKeystore.exists()) {
+            java.io.FileInputStream fis = new java.io.FileInputStream(downloadKeystore);
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(destFile);
+            byte[] buffer = new byte[8192];
+            int len;
+            while ((len = fis.read(buffer)) > 0) {
+                fos.write(buffer, 0, len);
+            }
+            fos.close();
+            fis.close();
+            Log.d(TAG, "✓ 从下载目录复制密钥库成功");
+            return;
+        }
+        
+        throw new Exception("未找到密钥库文件");
+    }
+    
+    /**
+     * 对补丁 ZIP 文件进行签名标记
+     * 注意：实际的签名已经由 AndroidPatchGenerator 处理
+     * 这个方法只是为了向后兼容，添加一个标记
      * 
      * @param patchFile 补丁文件
      */
     private void embedApkSignatureMarker(File patchFile) throws Exception {
-        Log.d(TAG, "开始为补丁添加签名信息...");
+        Log.d(TAG, "检查补丁签名...");
         
-        // 方案：从新版 APK 中提取 META-INF/ 签名信息，复制到补丁 ZIP 中
-        boolean success = copySignatureFromApk(patchFile, selectedNewApk);
+        // 检查补丁是否已经被签名
+        boolean isSigned = checkHasApkSignature(patchFile);
         
-        if (success) {
-            Log.i(TAG, "✓ 补丁已包含 APK 签名信息（META-INF/）");
+        if (isSigned) {
+            Log.i(TAG, "✓ 补丁已包含 APK 签名");
         } else {
-            Log.w(TAG, "无法复制签名信息，使用标记文件方案");
-            addSignatureMarkerFile(patchFile);
+            Log.w(TAG, "⚠ 补丁未签名，可能是因为密钥库不可用");
+            Log.w(TAG, "提示：将 smlieapp.jks 复制到下载目录，然后重新生成补丁");
         }
     }
     
