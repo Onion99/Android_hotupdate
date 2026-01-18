@@ -1009,6 +1009,7 @@ public class MainActivity extends AppCompatActivity {
                             new com.orange.update.SecurityManager(this);
                         
                         File encryptedFile;
+                        File previousFile = currentFile;  // 保存上一步的文件引用
                         
                         // 根据是否有密码选择加密方法
                         if (aesPassword != null && !aesPassword.isEmpty()) {
@@ -1027,6 +1028,21 @@ public class MainActivity extends AppCompatActivity {
                             // 使用默认密钥加密
                             Log.d(TAG, "使用默认密钥加密补丁");
                             encryptedFile = securityManager.encryptPatch(currentFile);
+                        }
+                        
+                        // 删除上一步的文件（如果不是原始补丁文件）
+                        // 注意：签名后的文件会被重命名为原始文件名，所以需要检查是否是同一个文件
+                        if (previousFile != null && previousFile.exists()) {
+                            // 检查是否是不同的文件（通过绝对路径比较）
+                            String previousPath = previousFile.getAbsolutePath();
+                            String encryptedPath = encryptedFile.getAbsolutePath();
+                            
+                            if (!previousPath.equals(encryptedPath)) {
+                                boolean deleted = previousFile.delete();
+                                Log.d(TAG, "删除上一步文件: " + previousFile.getName() + " - " + (deleted ? "成功" : "失败"));
+                            } else {
+                                Log.d(TAG, "上一步文件与加密文件相同，跳过删除");
+                            }
                         }
                         
                         currentFile = encryptedFile;  // 更新当前文件为加密后的文件
@@ -1286,35 +1302,62 @@ public class MainActivity extends AppCompatActivity {
         boolean requireSignature = securityPrefs.getBoolean(KEY_REQUIRE_SIGNATURE, false);
         boolean requireEncryption = securityPrefs.getBoolean(KEY_REQUIRE_ENCRYPTION, false);
         
-        boolean isEncrypted = patchToApply.getName().endsWith(".enc");
+        // 检查两种加密方式：AES 加密（.enc）或 ZIP 密码加密
+        boolean isAesEncrypted = patchToApply.getName().endsWith(".enc");
+        boolean isZipPasswordEncrypted = false;
         
-        // 检查 APK 签名（检查 META-INF/ 签名文件）
-        boolean hasSignature = checkHasApkSignature(patchToApply);
+        // 检查 ZIP 密码加密
+        if (!isAesEncrypted) {
+            try {
+                com.orange.update.ZipPasswordManager zipPasswordManager = 
+                    new com.orange.update.ZipPasswordManager(this);
+                isZipPasswordEncrypted = zipPasswordManager.isEncrypted(patchToApply);
+            } catch (Exception e) {
+                Log.d(TAG, "检查 ZIP 密码加密失败: " + e.getMessage());
+            }
+        }
+        
+        boolean isEncrypted = isAesEncrypted || isZipPasswordEncrypted;
         
         Log.d(TAG, "安全策略 - 要求签名: " + requireSignature + ", 要求加密: " + requireEncryption);
-        Log.d(TAG, "补丁状态 - 已加密: " + isEncrypted + ", 有签名: " + hasSignature);
+        Log.d(TAG, "补丁状态 - AES加密: " + isAesEncrypted + ", ZIP密码加密: " + isZipPasswordEncrypted + ", 已加密: " + isEncrypted);
         
-        // 检查安全策略
-        if (requireSignature && !hasSignature) {
-            new AlertDialog.Builder(this)
-                .setTitle("⚠️ 安全策略限制")
-                .setMessage("当前安全策略要求补丁必须包含 APK 签名！\n\n" +
-                           "此补丁未包含 APK 签名，拒绝应用。\n\n" +
-                           "补丁文件: " + patchToApply.getName() + "\n\n" +
-                           "解决方法：\n" +
-                           "1. 重新生成补丁，并选择「APK 签名验证」选项\n" +
-                           "2. 或在安全设置中关闭签名验证要求")
-                .setPositiveButton("确定", null)
-                .setNeutralButton("安全设置", (d, w) -> showSecuritySettingsDialog())
-                .setIcon(android.R.drawable.ic_dialog_alert)
-                .show();
-            return;
+        // 对于加密文件，签名检查将在 HotUpdateHelper 解密后进行
+        if (!isEncrypted) {
+            // 只对未加密文件检查签名
+            boolean hasSignature = checkHasApkSignature(patchToApply);
+            Log.d(TAG, "补丁状态 - 有签名: " + hasSignature);
+            
+            // 检查安全策略
+            if (requireSignature && !hasSignature) {
+                new AlertDialog.Builder(this)
+                    .setTitle("⚠️ 安全策略限制")
+                    .setMessage("当前安全策略要求补丁必须包含 APK 签名！\n\n" +
+                               "此补丁未包含 APK 签名，拒绝应用。\n\n" +
+                               "补丁文件: " + patchToApply.getName() + "\n\n" +
+                               "解决方法：\n" +
+                               "1. 重新生成补丁，并选择「APK 签名验证」选项\n" +
+                               "2. 或在安全设置中关闭签名验证要求")
+                    .setPositiveButton("确定", null)
+                    .setNeutralButton("安全设置", (d, w) -> showSecuritySettingsDialog())
+                    .setIcon(android.R.drawable.ic_dialog_alert)
+                    .show();
+                return;
+            }
+        } else {
+            // 对于加密文件，签名验证将在 HotUpdateHelper 中解密后进行
+            Log.d(TAG, "补丁已加密（" + (isAesEncrypted ? "AES" : "ZIP密码") + "），签名验证将在解密后进行");
         }
         
         if (requireEncryption && !isEncrypted) {
             new AlertDialog.Builder(this)
                 .setTitle("⚠️ 安全策略限制")
-                .setMessage("当前安全策略要求补丁必须加密！\n\n此补丁未加密，拒绝应用。\n\n请使用已加密的补丁，或在设置中关闭加密验证要求。")
+                .setMessage("当前安全策略要求补丁必须加密！\n\n" +
+                           "此补丁未加密，拒绝应用。\n\n" +
+                           "支持的加密方式：\n" +
+                           "1. AES 加密（.enc 文件）\n" +
+                           "2. ZIP 密码加密\n\n" +
+                           "请使用已加密的补丁，或在设置中关闭加密验证要求。")
                 .setPositiveButton("确定", null)
                 .setNeutralButton("安全设置", (d, w) -> showSecuritySettingsDialog())
                 .setIcon(android.R.drawable.ic_dialog_alert)
@@ -1322,9 +1365,8 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        // 无论是否有签名，都直接应用补丁
-        // HotUpdateHelper 会自动处理 APK 签名验证
-        Log.d(TAG, hasSignature ? "未加密补丁，直接应用" : "未加密补丁，直接应用");
+        // 直接应用补丁，HotUpdateHelper 会自动处理解密和签名验证
+        Log.d(TAG, "继续应用补丁流程");
         proceedWithPatch(patchToApply);
     }
     
@@ -1414,16 +1456,10 @@ public class MainActivity extends AppCompatActivity {
      * 继续处理补丁（签名验证通过后或无签名）
      */
     private void proceedWithPatch(File patchToApply) {
-        // 检查是否是加密的补丁
-        if (patchToApply.getName().endsWith(".enc")) {
-            // 加密的补丁，显示密码输入对话框
-            Log.d(TAG, "检测到加密补丁，显示密码输入对话框");
-            showDecryptPasswordDialog(patchToApply);
-        } else {
-            // 未加密的补丁，直接应用
-            Log.d(TAG, "未加密补丁，直接应用");
-            applyPatchDirect(patchToApply);
-        }
+        // 直接应用补丁，HotUpdateHelper 会自动处理加密和解密
+        // 不再在 MainActivity 中处理 AES 解密，统一由 HotUpdateHelper 处理
+        Log.d(TAG, "调用 HotUpdateHelper 应用补丁");
+        applyPatchDirect(patchToApply);
     }
     
     /**
@@ -1579,6 +1615,16 @@ public class MainActivity extends AppCompatActivity {
                     showZipPasswordDialog(patchFileToDecrypt);
                 });
             }
+            
+            @Override
+            public void onAesPasswordRequired(File patchFileToDecrypt) {
+                runOnUiThread(() -> {
+                    progressBar.setVisibility(View.GONE);
+                    setButtonsEnabled(true);
+                    // 显示 AES 密码输入对话框
+                    showAesPasswordDialog(patchFileToDecrypt);
+                });
+            }
         });
     }
     
@@ -1627,6 +1673,59 @@ public class MainActivity extends AppCompatActivity {
                 
                 // 使用密码应用补丁
                 applyPatchWithZipPassword(patchFile, zipPassword);
+            })
+            .setNegativeButton("取消", (d, w) -> {
+                tvStatus.setText("已取消应用补丁");
+            })
+            .setCancelable(false)
+            .show();
+    }
+    
+    /**
+     * 显示 AES 密码输入对话框
+     */
+    private void showAesPasswordDialog(File patchFile) {
+        // 创建对话框布局
+        android.widget.LinearLayout layout = new android.widget.LinearLayout(this);
+        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        layout.setPadding(50, 40, 50, 10);
+        
+        // 提示文本
+        TextView tvHint = new TextView(this);
+        tvHint.setText("此补丁使用了自定义密码加密，请输入密码：");
+        tvHint.setTextSize(14);
+        tvHint.setPadding(0, 0, 0, 20);
+        layout.addView(tvHint);
+        
+        // 密码输入框
+        android.widget.EditText etAesPassword = new android.widget.EditText(this);
+        etAesPassword.setHint("输入解密密码");
+        etAesPassword.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        layout.addView(etAesPassword);
+        
+        // 提示信息
+        TextView tvNote = new TextView(this);
+        tvNote.setText("\n💡 提示：\n• 请输入生成补丁时设置的加密密码\n• 如果生成时未设置密码，请联系管理员");
+        tvNote.setTextSize(12);
+        tvNote.setTextColor(0xFF666666);
+        layout.addView(tvNote);
+        
+        // 创建对话框
+        new AlertDialog.Builder(this)
+            .setTitle("🔐 解密补丁")
+            .setView(layout)
+            .setPositiveButton("解密并应用", (d, w) -> {
+                String aesPassword = etAesPassword.getText().toString().trim();
+                
+                if (aesPassword.isEmpty()) {
+                    Toast.makeText(this, "请输入解密密码", Toast.LENGTH_SHORT).show();
+                    // 重新显示对话框
+                    showAesPasswordDialog(patchFile);
+                    return;
+                }
+                
+                // 使用密码应用补丁
+                applyPatchWithAesPassword(patchFile, aesPassword);
             })
             .setNegativeButton("取消", (d, w) -> {
                 tvStatus.setText("已取消应用补丁");
@@ -1697,6 +1796,83 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show();
                     }
+                });
+            }
+        });
+    }
+    
+    /**
+     * 使用 AES 密码应用补丁
+     */
+    private void applyPatchWithAesPassword(File patchFile, String aesPassword) {
+        tvStatus.setText("正在解密补丁...");
+        progressBar.setProgress(0);
+        progressBar.setVisibility(View.VISIBLE);
+        setButtonsEnabled(false);
+
+        hotUpdateHelper.applyPatchWithAesPassword(patchFile, aesPassword, new HotUpdateHelper.Callback() {
+            @Override
+            public void onProgress(int percent, String message) {
+                runOnUiThread(() -> {
+                    progressBar.setProgress(percent);
+                    tvStatus.setText(message);
+                });
+            }
+
+            @Override
+            public void onSuccess(HotUpdateHelper.PatchResult result) {
+                runOnUiThread(() -> {
+                    progressBar.setVisibility(View.GONE);
+                    setButtonsEnabled(true);
+                    tvStatus.setText("🔥 热更新成功!");
+                    
+                    // 更新版本显示
+                    tvVersion.setText("v" + result.patchVersion + " (热更新)");
+                    
+                    // 显示清除按钮
+                    btnClearPatch.setVisibility(View.VISIBLE);
+                    
+                    // 显示结果
+                    showRealHotUpdateResult(result);
+                    
+                    // 延迟重新创建 Activity，让用户看到成功消息
+                    new android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(() -> {
+                        // 重新创建 Activity 以显示资源更新（如布局中的火焰图标）
+                        recreate();
+                    }, 1500); // 1.5秒后重新创建
+                });
+            }
+
+            @Override
+            public void onError(String message) {
+                runOnUiThread(() -> {
+                    progressBar.setVisibility(View.GONE);
+                    setButtonsEnabled(true);
+                    tvStatus.setText("✗ 热更新失败: " + message);
+                    
+                    // 如果是密码错误，提示用户重新输入
+                    if (message.contains("密码") || message.contains("解密失败")) {
+                        new AlertDialog.Builder(MainActivity.this)
+                            .setTitle("⚠️ 密码错误")
+                            .setMessage(message + "\n\n是否重新输入密码？")
+                            .setPositiveButton("重新输入", (d, w) -> {
+                                showAesPasswordDialog(patchFile);
+                            })
+                            .setNegativeButton("取消", null)
+                            .show();
+                    } else {
+                        Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show();
+                    }
+                });
+            }
+            
+            @Override
+            public void onZipPasswordRequired(File patchFileToDecrypt) {
+                runOnUiThread(() -> {
+                    progressBar.setVisibility(View.GONE);
+                    setButtonsEnabled(true);
+                    // 显示 ZIP 密码输入对话框
+                    showZipPasswordDialog(patchFileToDecrypt);
                 });
             }
         });

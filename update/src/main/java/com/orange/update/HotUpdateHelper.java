@@ -99,7 +99,7 @@ public class HotUpdateHelper {
                     callback.onProgress(5, "准备应用补丁...");
                 }
                 
-                // 1. 检查安全策略
+                // 1. 检查安全策略（对于加密文件，签名验证将在解密后进行）
                 String securityError = checkSecurityPolicy(patchFile);
                 if (securityError != null) {
                     if (callback != null) {
@@ -108,18 +108,92 @@ public class HotUpdateHelper {
                     return;
                 }
                 
-                if (callback != null) {
-                    callback.onProgress(10, "检查 ZIP 密码保护...");
+                // 2. 处理 AES 加密（如果是 .enc 文件）
+                File actualPatchFile = patchFile;
+                File tempDecryptedFile = null;
+                boolean isAesEncrypted = patchFile.getName().endsWith(".enc");
+                
+                if (isAesEncrypted) {
+                    Log.d(TAG, "检测到 AES 加密补丁");
+                    
+                    if (callback != null) {
+                        callback.onProgress(10, "解密补丁...");
+                    }
+                    
+                    try {
+                        // 解密 AES 加密的补丁（先尝试使用默认密钥）
+                        tempDecryptedFile = new File(context.getCacheDir(), "temp_decrypt_" + System.currentTimeMillis() + ".zip");
+                        byte[] encryptedData = readFileToBytes(patchFile);
+                        byte[] decryptedData = securityManager.decrypt(encryptedData);
+                        
+                        java.io.FileOutputStream fos = new java.io.FileOutputStream(tempDecryptedFile);
+                        fos.write(decryptedData);
+                        fos.close();
+                        
+                        actualPatchFile = tempDecryptedFile;
+                        Log.d(TAG, "✓ AES 解密成功（使用默认密钥）");
+                        
+                    } catch (Exception e) {
+                        Log.e(TAG, "AES 解密失败（默认密钥）: " + e.getMessage());
+                        
+                        // 清理临时文件
+                        if (tempDecryptedFile != null && tempDecryptedFile.exists()) {
+                            tempDecryptedFile.delete();
+                        }
+                        
+                        // 通知 UI 需要用户输入密码
+                        if (callback != null) {
+                            callback.onAesPasswordRequired(patchFile);
+                        }
+                        return;
+                    }
+                    
+                    // 解密成功后验证签名（如果要求签名）
+                    boolean requireSignature = securityPrefs.getBoolean(KEY_REQUIRE_SIGNATURE, false);
+                    if (requireSignature) {
+                        if (callback != null) {
+                            callback.onProgress(15, "验证补丁签名...");
+                        }
+                        
+                        boolean hasSignature = checkHasSignature(actualPatchFile);
+                        if (!hasSignature) {
+                            if (tempDecryptedFile != null && tempDecryptedFile.exists()) {
+                                tempDecryptedFile.delete();
+                            }
+                            if (callback != null) {
+                                callback.onError("当前安全策略要求补丁必须签名！此补丁未签名，拒绝应用。");
+                            }
+                            return;
+                        }
+                        
+                        // 验证签名与应用签名匹配
+                        boolean signatureValid = patchSigner.verifyPatchSignatureMatchesApp(actualPatchFile);
+                        if (!signatureValid) {
+                            if (tempDecryptedFile != null && tempDecryptedFile.exists()) {
+                                tempDecryptedFile.delete();
+                            }
+                            if (callback != null) {
+                                callback.onError("⚠️ APK 签名验证失败: " + patchSigner.getError());
+                            }
+                            return;
+                        }
+                        
+                        Log.d(TAG, "✅ APK 签名验证通过（解密后）");
+                    }
                 }
                 
-                // 2. 检查并处理 ZIP 密码加密
+                if (callback != null) {
+                    callback.onProgress(20, "检查 ZIP 密码保护...");
+                }
+                
+                // 3. 检查并处理 ZIP 密码加密
                 ZipPasswordManager zipPasswordManager = storage.getZipPasswordManager();
                 
-                if (zipPasswordManager.isEncrypted(patchFile)) {
+                if (zipPasswordManager.isEncrypted(actualPatchFile)) {
                     Log.d(TAG, "检测到 ZIP 密码加密");
                     
                     if (callback != null) {
-                        callback.onProgress(15, "检查 ZIP 密码保护...");
+                        callback.onProgress(25, "检查 ZIP 密码保护...");
                     }
                     
                     // 检查是否有密码提示文件（.zippwd）
@@ -128,6 +202,11 @@ public class HotUpdateHelper {
                     
                     if (hasCustomPassword) {
                         Log.d(TAG, "检测到自定义 ZIP 密码，需要用户输入");
+                        
+                        // 清理临时解密文件
+                        if (tempDecryptedFile != null && tempDecryptedFile.exists()) {
+                            tempDecryptedFile.delete();
+                        }
                         
                         // 通知 UI 需要用户输入密码
                         if (callback != null) {
@@ -142,11 +221,20 @@ public class HotUpdateHelper {
                 }
                 
                 if (callback != null) {
-                    callback.onProgress(20, "准备应用补丁...");
+                    callback.onProgress(30, "准备应用补丁...");
                 }
                 
-                // 3. 继续应用补丁流程（ZIP 密码保护的补丁将以加密状态保存）
-                applyPatchInternal(patchFile, patchFile, callback);
+                // 4. 继续应用补丁流程
+                File finalTempFile = tempDecryptedFile;
+                try {
+                    applyPatchInternal(actualPatchFile, patchFile, callback);
+                } finally {
+                    // 清理临时解密文件
+                    if (finalTempFile != null && finalTempFile.exists()) {
+                        finalTempFile.delete();
+                        Log.d(TAG, "✓ 清理临时解密文件");
+                    }
+                }
                 
             } catch (Exception e) {
                 Log.e(TAG, "应用补丁失败", e);
@@ -438,28 +526,53 @@ public class HotUpdateHelper {
         boolean requireSignature = securityPrefs.getBoolean(KEY_REQUIRE_SIGNATURE, false);
         boolean requireEncryption = securityPrefs.getBoolean(KEY_REQUIRE_ENCRYPTION, false);
         
-        boolean isEncrypted = patchFile.getName().endsWith(".enc");
-        boolean hasSignature = checkHasSignature(patchFile);
+        // 检查两种加密方式：AES 加密（.enc）或 ZIP 密码加密
+        boolean isAesEncrypted = patchFile.getName().endsWith(".enc");
+        boolean isZipPasswordEncrypted = false;
+        
+        // 检查 ZIP 密码加密
+        if (!isAesEncrypted) {
+            try {
+                ZipPasswordManager zipPasswordManager = storage.getZipPasswordManager();
+                isZipPasswordEncrypted = zipPasswordManager.isEncrypted(patchFile);
+            } catch (Exception e) {
+                Log.d(TAG, "检查 ZIP 密码加密失败: " + e.getMessage());
+            }
+        }
+        
+        boolean isEncrypted = isAesEncrypted || isZipPasswordEncrypted;
         
         Log.d(TAG, "安全策略 - 要求签名: " + requireSignature + ", 要求加密: " + requireEncryption);
-        Log.d(TAG, "补丁状态 - 已加密: " + isEncrypted + ", 有签名: " + hasSignature);
+        Log.d(TAG, "补丁状态 - AES加密: " + isAesEncrypted + ", ZIP密码加密: " + isZipPasswordEncrypted + ", 已加密: " + isEncrypted);
         
-        if (requireSignature && !hasSignature) {
-            return "当前安全策略要求补丁必须签名！此补丁未签名，拒绝应用。";
-        }
-        
+        // 对于加密文件，签名验证将在解密后进行
+        // 这里只检查加密要求
         if (requireEncryption && !isEncrypted) {
-            return "当前安全策略要求补丁必须加密！此补丁未加密，拒绝应用。";
+            return "当前安全策略要求补丁必须加密！此补丁未加密，拒绝应用。\n\n支持的加密方式：\n1. AES 加密（.enc 文件）\n2. ZIP 密码加密";
         }
         
-        // APK 签名验证（如果补丁有签名）- 使用 apksig
-        if (hasSignature) {
-            Log.d(TAG, "检测到补丁签名，开始验证 APK 签名...");
-            boolean signatureValid = patchSigner.verifyPatchSignatureMatchesApp(patchFile);
-            if (!signatureValid) {
-                return "⚠️ APK 签名验证失败: " + patchSigner.getError();
+        // 对于未加密文件，直接检查签名
+        if (!isEncrypted) {
+            boolean hasSignature = checkHasSignature(patchFile);
+            Log.d(TAG, "补丁状态 - 有签名: " + hasSignature);
+            
+            if (requireSignature && !hasSignature) {
+                return "当前安全策略要求补丁必须签名！此补丁未签名，拒绝应用。";
             }
-            Log.d(TAG, "✅ APK 签名验证通过");
+            
+            // APK 签名验证（如果补丁有签名）- 使用 apksig
+            if (hasSignature) {
+                Log.d(TAG, "检测到补丁签名，开始验证 APK 签名...");
+                boolean signatureValid = patchSigner.verifyPatchSignatureMatchesApp(patchFile);
+                
+                if (!signatureValid) {
+                    return "⚠️ APK 签名验证失败: " + patchSigner.getError();
+                }
+                Log.d(TAG, "✅ APK 签名验证通过");
+            }
+        } else {
+            // 对于加密文件，签名验证将在解密后进行
+            Log.d(TAG, "补丁已加密，签名验证将在解密后进行");
         }
         
         return null;
@@ -589,6 +702,19 @@ public class HotUpdateHelper {
             // 默认实现：不处理，直接报错
             onError("补丁需要 ZIP 密码，但未提供密码输入接口");
         }
+        
+        /**
+         * 需要 AES 密码回调
+         * 
+         * 当 AES 解密失败时调用此方法（可能是使用了自定义密码）。
+         * UI 应该弹出对话框让用户输入密码，然后调用 applyPatchWithAesPassword() 继续应用补丁。
+         * 
+         * @param patchFile 补丁文件
+         */
+        default void onAesPasswordRequired(File patchFile) {
+            // 默认实现：不处理，直接报错
+            onError("补丁需要 AES 密码，但未提供密码输入接口");
+        }
     }
     
     /**
@@ -712,6 +838,148 @@ public class HotUpdateHelper {
                 
             } catch (Exception e) {
                 Log.e(TAG, "应用补丁失败", e);
+                if (callback != null) {
+                    callback.onError("应用补丁失败: " + e.getMessage());
+                }
+            }
+        });
+    }
+    
+    /**
+     * 应用补丁（使用自定义 AES 密码）
+     * 
+     * 当 onAesPasswordRequired() 被调用后，UI 应该获取用户输入的密码，
+     * 然后调用此方法继续应用补丁。
+     * 
+     * @param patchFile 补丁文件（.enc 文件）
+     * @param aesPassword 用户输入的 AES 密码
+     * @param callback 回调接口
+     */
+    public void applyPatchWithAesPassword(File patchFile, String aesPassword, Callback callback) {
+        if (patchFile == null || !patchFile.exists()) {
+            if (callback != null) {
+                callback.onError("补丁文件不存在");
+            }
+            return;
+        }
+        
+        if (aesPassword == null || aesPassword.isEmpty()) {
+            if (callback != null) {
+                callback.onError("AES 密码不能为空");
+            }
+            return;
+        }
+        
+        executor.execute(() -> {
+            File tempDecryptedFile = null;
+            try {
+                // 通知开始
+                if (callback != null) {
+                    callback.onProgress(5, "准备应用补丁...");
+                }
+                
+                // 1. 检查安全策略（对于加密文件，签名验证将在解密后进行）
+                String securityError = checkSecurityPolicy(patchFile);
+                if (securityError != null) {
+                    if (callback != null) {
+                        callback.onError(securityError);
+                    }
+                    return;
+                }
+                
+                if (callback != null) {
+                    callback.onProgress(10, "使用密码解密补丁...");
+                }
+                
+                // 2. 使用密码解密 AES 加密的补丁
+                tempDecryptedFile = securityManager.decryptPatchWithPassword(patchFile, aesPassword);
+                
+                Log.d(TAG, "✓ AES 解密成功（使用自定义密码）");
+                
+                // 3. 解密后验证签名（如果要求签名）
+                boolean requireSignature = securityPrefs.getBoolean(KEY_REQUIRE_SIGNATURE, false);
+                if (requireSignature) {
+                    if (callback != null) {
+                        callback.onProgress(15, "验证补丁签名...");
+                    }
+                    
+                    boolean hasSignature = checkHasSignature(tempDecryptedFile);
+                    if (!hasSignature) {
+                        if (tempDecryptedFile.exists()) {
+                            tempDecryptedFile.delete();
+                        }
+                        if (callback != null) {
+                            callback.onError("当前安全策略要求补丁必须签名！此补丁未签名，拒绝应用。");
+                        }
+                        return;
+                    }
+                    
+                    // 验证签名与应用签名匹配
+                    boolean signatureValid = patchSigner.verifyPatchSignatureMatchesApp(tempDecryptedFile);
+                    if (!signatureValid) {
+                        if (tempDecryptedFile.exists()) {
+                            tempDecryptedFile.delete();
+                        }
+                        if (callback != null) {
+                            callback.onError("⚠️ APK 签名验证失败: " + patchSigner.getError());
+                        }
+                        return;
+                    }
+                    
+                    Log.d(TAG, "✅ APK 签名验证通过（解密后）");
+                }
+                
+                if (callback != null) {
+                    callback.onProgress(20, "检查 ZIP 密码保护...");
+                }
+                
+                // 4. 检查并处理 ZIP 密码加密
+                ZipPasswordManager zipPasswordManager = storage.getZipPasswordManager();
+                
+                if (zipPasswordManager.isEncrypted(tempDecryptedFile)) {
+                    Log.d(TAG, "检测到 ZIP 密码加密");
+                    
+                    // 检查是否有密码提示文件（.zippwd）
+                    File zipPasswordFile = new File(patchFile.getPath() + ".zippwd");
+                    boolean hasCustomPassword = zipPasswordFile.exists();
+                    
+                    if (hasCustomPassword) {
+                        Log.d(TAG, "检测到自定义 ZIP 密码，需要用户输入");
+                        
+                        // 清理临时解密文件
+                        if (tempDecryptedFile.exists()) {
+                            tempDecryptedFile.delete();
+                        }
+                        
+                        // 通知 UI 需要用户输入密码
+                        if (callback != null) {
+                            callback.onZipPasswordRequired(patchFile);
+                        }
+                        return;
+                    }
+                }
+                
+                if (callback != null) {
+                    callback.onProgress(30, "准备应用补丁...");
+                }
+                
+                // 5. 继续应用补丁流程
+                File finalTempFile = tempDecryptedFile;
+                try {
+                    applyPatchInternal(tempDecryptedFile, patchFile, callback);
+                } finally {
+                    // 清理临时解密文件
+                    if (finalTempFile != null && finalTempFile.exists()) {
+                        finalTempFile.delete();
+                        Log.d(TAG, "✓ 清理临时解密文件");
+                    }
+                }
+                
+            } catch (Exception e) {
+                Log.e(TAG, "应用补丁失败", e);
+                if (tempDecryptedFile != null && tempDecryptedFile.exists()) {
+                    tempDecryptedFile.delete();
+                }
                 if (callback != null) {
                     callback.onError("应用补丁失败: " + e.getMessage());
                 }
