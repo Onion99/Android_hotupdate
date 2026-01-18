@@ -2950,10 +2950,10 @@ public class MainActivity extends AppCompatActivity {
         // 当前 JKS 文件状态显示
         tvJksStatus = new TextView(this);
         if (selectedKeystoreFile != null && selectedKeystoreFile.exists()) {
-            tvJksStatus.setText("✓ 当前 JKS 文件: " + selectedKeystoreFile.getName());
+            tvJksStatus.setText("✓ 当前签名件: " + selectedKeystoreFile.getName());
             tvJksStatus.setTextColor(0xFF4CAF50);  // 绿色
         } else {
-            tvJksStatus.setText("⚠ 未选择 JKS 文件");
+            tvJksStatus.setText("⚠ 未选签名文件");
             tvJksStatus.setTextColor(0xFFFF9800);  // 橙色
         }
         tvJksStatus.setTextSize(13);
@@ -2969,7 +2969,7 @@ public class MainActivity extends AppCompatActivity {
         
         // 格式提示
         TextView tvFormatHint = new TextView(this);
-        tvFormatHint.setText("  ✓ 支持格式：PKCS12 (.p12), BKS (.bks)\n  ✗ 不支持 JKS 格式（Android 限制）\n\n  转换命令：\n  keytool -importkeystore -srckeystore xxx.jks \\\n    -destkeystore xxx.p12 -deststoretype PKCS12");
+        tvFormatHint.setText("  ✓ 支持格式：PKCS12 (.p12), BKS (.bks)，JKS (.jks)");
         tvFormatHint.setTextSize(11);
         tvFormatHint.setTextColor(0xFFFF9800);  // 橙色警告
         tvFormatHint.setPadding(0, 5, 0, 10);
