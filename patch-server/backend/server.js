@@ -60,6 +60,7 @@ app.use('/downloads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/auth', require('./src/routes/auth'));
 app.use('/api/apps', require('./src/routes/apps'));
 app.use('/api/patches', require('./src/routes/patches'));
+app.use('/api/versions', require('./src/routes/versions')); // 版本管理
 app.use('/api/patch-merge', require('./src/routes/patch-merge')); // 补丁合并
 app.use('/api/generate', require('./src/routes/generate'));
 app.use('/api/client', require('./src/routes/client'));

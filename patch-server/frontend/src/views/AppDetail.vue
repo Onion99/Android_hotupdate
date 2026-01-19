@@ -60,7 +60,8 @@
       </el-tab-pane>
 
       <el-tab-pane label="应用设置" name="settings">
-        <el-form :model="app" label-width="120px" class="settings-form">
+        <el-form :model="app" label-width="140px" class="settings-form">
+          <el-divider content-position="left">基本信息</el-divider>
           <el-form-item label="App ID">
             <el-input v-model="app.app_id" disabled>
               <template #append>
@@ -86,11 +87,110 @@
               <el-radio label="inactive">停用</el-radio>
             </el-radio-group>
           </el-form-item>
+          
+          <el-divider content-position="left">强制更新配置</el-divider>
+          <el-alert
+            title="强制大版本更新"
+            type="info"
+            :closable="false"
+            style="margin-bottom: 20px;"
+          >
+            <p style="margin: 0;">当用户版本低于设定的最新版本时，将强制用户更新到最新版本，无法使用热更新补丁。</p>
+          </el-alert>
+          
+          <el-form-item label="启用强制更新">
+            <el-switch v-model="app.force_update_enabled" :active-value="1" :inactive-value="0" />
+            <span style="margin-left: 12px; color: #909399; font-size: 13px;">
+              开启后，低于最新版本的用户将被强制更新
+            </span>
+          </el-form-item>
+          
+          <el-form-item label="最新版本号" v-if="app.force_update_enabled">
+            <el-input v-model="app.latest_version" placeholder="如: 1.5.0">
+              <template #prepend>v</template>
+            </el-input>
+            <div style="color: #909399; font-size: 12px; margin-top: 4px;">
+              低于此版本的用户将被强制更新
+            </div>
+          </el-form-item>
+          
+          <el-form-item label="下载地址" v-if="app.force_update_enabled">
+            <el-input v-model="app.force_update_url" placeholder="APK 下载地址" />
+            <div style="color: #909399; font-size: 12px; margin-top: 4px;">
+              可以使用版本管理中上传的 APK，或填写外部下载链接
+            </div>
+          </el-form-item>
+          
+          <el-form-item label="更新提示" v-if="app.force_update_enabled">
+            <el-input 
+              v-model="app.force_update_message" 
+              type="textarea" 
+              :rows="3"
+              placeholder="发现新版本，请更新到最新版本"
+            />
+          </el-form-item>
+          
           <el-form-item>
-            <el-button type="primary" @click="updateApp">保存</el-button>
+            <el-button type="primary" @click="updateApp">保存设置</el-button>
             <el-button type="danger" @click="deleteApp">删除应用</el-button>
           </el-form-item>
         </el-form>
+      </el-tab-pane>
+
+      <el-tab-pane label="版本管理" name="versions">
+        <div class="versions-section">
+          <div class="section-header">
+            <div>
+              <h3>大版本管理</h3>
+              <p style="color: #909399; margin: 4px 0 0 0;">管理应用的完整 APK 版本，用于强制更新</p>
+            </div>
+            <el-button type="primary" @click="showUploadVersionDialog = true">
+              <el-icon><Upload /></el-icon>
+              上传新版本
+            </el-button>
+          </div>
+
+          <div class="versions-list" v-if="versions && versions.length > 0" v-loading="versionsLoading">
+            <div class="version-item" v-for="version in versions" :key="version.id">
+              <div class="version-info">
+                <div class="version-header">
+                  <el-tag type="primary" size="large">v{{ version.version_name }}</el-tag>
+                  <el-tag size="small" style="margin-left: 8px;">Code: {{ version.version_code }}</el-tag>
+                  <el-icon v-if="version.is_force_update" color="#f56c6c" style="margin-left: 8px;">
+                    <Warning />
+                  </el-icon>
+                  <span v-if="version.is_force_update" style="color: #f56c6c; font-size: 13px; margin-left: 4px;">
+                    强制更新
+                  </span>
+                </div>
+                <div class="version-details">
+                  <p class="version-desc">{{ version.description || '无描述' }}</p>
+                  <div class="version-changelog" v-if="version.changelog">
+                    <strong>更新说明：</strong>
+                    <pre>{{ version.changelog }}</pre>
+                  </div>
+                  <div class="version-meta">
+                    <span>大小: {{ formatSize(version.file_size) }}</span>
+                    <span>下载: {{ version.download_count }}</span>
+                    <span>MD5: {{ version.md5.substring(0, 8) }}...</span>
+                    <span>{{ formatDate(version.created_at) }}</span>
+                    <span v-if="version.creator_name">上传者: {{ version.creator_name }}</span>
+                  </div>
+                </div>
+              </div>
+              <div class="version-actions">
+                <el-tag :type="version.status === 'active' ? 'success' : 'info'">
+                  {{ version.status === 'active' ? '活跃' : '停用' }}
+                </el-tag>
+                <el-button size="small" @click="editVersion(version)">编辑</el-button>
+                <el-button size="small" @click="downloadVersion(version)">下载</el-button>
+                <el-button size="small" @click="copyVersionUrl(version)">复制链接</el-button>
+                <el-button size="small" type="danger" @click="deleteVersion(version.id)">删除</el-button>
+              </div>
+            </div>
+          </div>
+          <el-empty v-else description="还没有上传版本" />
+        </div>
       </el-tab-pane>
 
       <el-tab-pane label="API 对接" name="api">
@@ -598,6 +698,129 @@
           style="margin-bottom: 20px;"
         >
           <p style="margin: 0; font-size: 13px;">
+
+    <!-- 上传版本对话框 -->
+    <el-dialog v-model="showUploadVersionDialog" title="上传新版本" width="600px">
+      <el-form :model="versionForm" label-width="120px">
+        <el-form-item label="版本名称" required>
+          <el-input v-model="versionForm.versionName" placeholder="如: 1.5.0">
+            <template #prepend>v</template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="版本号" required>
+          <el-input-number v-model="versionForm.versionCode" :min="1" placeholder="如: 5" style="width: 100%;" />
+          <div style="font-size: 12px; color: #999; margin-top: 4px;">
+            整数版本号，必须大于之前的版本
+          </div>
+        </el-form-item>
+        <el-form-item label="APK 文件" required>
+          <el-upload
+            ref="versionUploadRef"
+            :auto-upload="false"
+            :limit="1"
+            accept=".apk"
+            :on-change="handleVersionFileChange"
+          >
+            <el-button>选择 APK 文件</el-button>
+            <template #tip>
+              <div style="font-size: 12px; color: #999; margin-top: 4px;">
+                支持 .apk 格式，最大 500MB
+              </div>
+            </template>
+          </el-upload>
+        </el-form-item>
+        <el-form-item label="版本描述">
+          <el-input v-model="versionForm.description" type="textarea" :rows="2" placeholder="简短描述" />
+        </el-form-item>
+        <el-form-item label="更新说明">
+          <el-input v-model="versionForm.changelog" type="textarea" :rows="4" placeholder="详细的更新内容" />
+        </el-form-item>
+        <el-form-item label="下载地址">
+          <el-input v-model="versionForm.downloadUrl" placeholder="留空则使用服务器地址" />
+          <div style="font-size: 12px; color: #999; margin-top: 4px;">
+            可选，填写外部下载链接（如应用商店）
+          </div>
+        </el-form-item>
+        <el-form-item label="强制更新">
+          <el-switch v-model="versionForm.isForceUpdate" />
+          <div style="font-size: 12px; color: #999; margin-top: 4px;">
+            开启后，低于此版本的用户将被强制更新
+          </div>
+        </el-form-item>
+        <el-form-item label="最低支持版本" v-if="versionForm.isForceUpdate">
+          <el-input v-model="versionForm.minSupportedVersion" placeholder="如: 1.0.0" />
+          <div style="font-size: 12px; color: #999; margin-top: 4px;">
+            低于此版本的用户将被强制更新
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showUploadVersionDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleUploadVersion" :loading="uploadingVersion">
+          {{ uploadingVersion ? '上传中...' : '上传' }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 编辑版本对话框 -->
+    <el-dialog v-model="showEditVersionDialog" title="编辑版本" width="600px">
+      <el-form :model="editVersionForm" label-width="120px">
+        <el-form-item label="版本">
+          <el-input :value="`v${editVersionForm.version_name} (${editVersionForm.version_code})`" disabled />
+        </el-form-item>
+        <el-form-item label="版本描述">
+          <el-input v-model="editVersionForm.description" type="textarea" :rows="2" />
+        </el-form-item>
+        <el-form-item label="更新说明">
+          <el-input v-model="editVersionForm.changelog" type="textarea" :rows="4" />
+        </el-form-item>
+        <el-form-item label="下载地址">
+          <el-input v-model="editVersionForm.download_url" />
+        </el-form-item>
+        <el-form-item label="强制更新">
+          <el-switch v-model="editVersionForm.is_force_update" :active-value="1" :inactive-value="0" />
+        </el-form-item>
+        <el-form-item label="最低支持版本" v-if="editVersionForm.is_force_update">
+          <el-input v-model="editVersionForm.min_supported_version" />
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-radio-group v-model="editVersionForm.status">
+            <el-radio label="active">活跃</el-radio>
+            <el-radio label="inactive">停用</el-radio>
+          </el-radio-group>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showEditVersionDialog = false">取消</el-button>
+        <el-button type="primary" @click="handleUpdateVersion">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 灰度发布配置对话框 -->
+    <el-dialog v-model="showRolloutDialogVisible" title="灰度发布配置" width="600px">
+      <el-form :model="rolloutForm" label-width="120px">
+        <el-form-item label="补丁版本">
+          <el-input v-model="rolloutForm.version" disabled />
+        </el-form-item>
+        
+        <el-form-item label="灰度百分比">
+          <el-slider 
+            v-model="rolloutForm.percentage" 
+            :marks="{ 0: '0%', 25: '25%', 50: '50%', 75: '75%', 100: '100%' }"
+            :step="5"
+          />
+          <div style="text-align: center; margin-top: 8px; font-size: 14px; color: #666;">
+            当前灰度: <strong style="color: #d4af7a; font-size: 18px;">{{ rolloutForm.percentage }}%</strong>
+          </div>
+        </el-form-item>
+
+        <el-alert
+          :title="getRolloutTip()"
+          type="info"
+          :closable="false"
+          style="margin-bottom: 20px;"
+        >
+          <p style="margin: 0; font-size: 13px;">
             {{ getRolloutDescription() }}
           </p>
         </el-alert>
@@ -626,7 +849,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue';
+import { ref, reactive, onMounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { ArrowLeft, Box, Upload, Warning, Tools, Refresh, CircleCheck, DocumentCopy } from '@element-plus/icons-vue';
@@ -639,6 +862,37 @@ const activeTab = ref('patches');
 const showUploadDialog = ref(false);
 const uploading = ref(false);
 const uploadRef = ref(null);
+
+// 版本管理相关
+const versions = ref([]);
+const versionsLoading = ref(false);
+const showUploadVersionDialog = ref(false);
+const showEditVersionDialog = ref(false);
+const uploadingVersion = ref(false);
+const versionUploadRef = ref(null);
+
+const versionForm = reactive({
+  versionName: '',
+  versionCode: null,
+  description: '',
+  changelog: '',
+  downloadUrl: '',
+  isForceUpdate: false,
+  minSupportedVersion: '',
+  file: null
+});
+
+const editVersionForm = reactive({
+  id: null,
+  version_name: '',
+  version_code: null,
+  description: '',
+  changelog: '',
+  download_url: '',
+  is_force_update: 0,
+  min_supported_version: '',
+  status: 'active'
+});
 
 const uploadForm = reactive({
   version: '',
@@ -1021,11 +1275,160 @@ const loadApp = async () => {
   try {
     const { data } = await api.get(`/apps/${route.params.id}`);
     app.value = data;
+    
+    // 如果在版本管理标签页，加载版本列表
+    if (activeTab.value === 'versions') {
+      loadVersions();
+    }
   } catch (error) {
     ElMessage.error('加载应用详情失败');
     router.back();
   }
 };
+
+// 加载版本列表
+const loadVersions = async () => {
+  versionsLoading.value = true;
+  try {
+    const { data } = await api.get(`/versions/${route.params.id}`);
+    versions.value = data.versions;
+  } catch (error) {
+    ElMessage.error('加载版本列表失败');
+  } finally {
+    versionsLoading.value = false;
+  }
+};
+
+// 处理版本文件选择
+const handleVersionFileChange = (file) => {
+  versionForm.file = file.raw;
+};
+
+// 上传新版本
+const handleUploadVersion = async () => {
+  if (!versionForm.versionName || !versionForm.versionCode || !versionForm.file) {
+    ElMessage.warning('请填写完整信息并选择 APK 文件');
+    return;
+  }
+
+  uploadingVersion.value = true;
+  try {
+    const formData = new FormData();
+    formData.append('file', versionForm.file);
+    formData.append('versionName', versionForm.versionName);
+    formData.append('versionCode', versionForm.versionCode);
+    formData.append('description', versionForm.description);
+    formData.append('changelog', versionForm.changelog);
+    formData.append('downloadUrl', versionForm.downloadUrl);
+    formData.append('isForceUpdate', versionForm.isForceUpdate);
+    formData.append('minSupportedVersion', versionForm.minSupportedVersion);
+
+    await api.post(`/versions/${route.params.id}/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+
+    ElMessage.success('版本上传成功');
+    showUploadVersionDialog.value = false;
+    
+    // 重置表单
+    Object.assign(versionForm, {
+      versionName: '',
+      versionCode: null,
+      description: '',
+      changelog: '',
+      downloadUrl: '',
+      isForceUpdate: false,
+      minSupportedVersion: '',
+      file: null
+    });
+    
+    if (versionUploadRef.value) {
+      versionUploadRef.value.clearFiles();
+    }
+    
+    loadVersions();
+    loadApp(); // 重新加载应用信息（更新强制更新配置）
+  } catch (error) {
+    ElMessage.error(error.response?.data?.error || '上传版本失败');
+  } finally {
+    uploadingVersion.value = false;
+  }
+};
+
+// 编辑版本
+const editVersion = (version) => {
+  Object.assign(editVersionForm, {
+    id: version.id,
+    version_name: version.version_name,
+    version_code: version.version_code,
+    description: version.description || '',
+    changelog: version.changelog || '',
+    download_url: version.download_url || '',
+    is_force_update: version.is_force_update,
+    min_supported_version: version.min_supported_version || '',
+    status: version.status
+  });
+  showEditVersionDialog.value = true;
+};
+
+// 更新版本信息
+const handleUpdateVersion = async () => {
+  try {
+    await api.put(`/versions/${editVersionForm.id}`, {
+      description: editVersionForm.description,
+      changelog: editVersionForm.changelog,
+      downloadUrl: editVersionForm.download_url,
+      isForceUpdate: editVersionForm.is_force_update === 1,
+      minSupportedVersion: editVersionForm.min_supported_version,
+      status: editVersionForm.status
+    });
+
+    ElMessage.success('版本更新成功');
+    showEditVersionDialog.value = false;
+    loadVersions();
+    loadApp();
+  } catch (error) {
+    ElMessage.error(error.response?.data?.error || '更新版本失败');
+  }
+};
+
+// 下载版本
+const downloadVersion = (version) => {
+  const url = version.download_url || `${window.location.origin}/api/versions/download/${version.id}`;
+  window.open(url, '_blank');
+};
+
+// 复制版本下载链接
+const copyVersionUrl = (version) => {
+  const url = version.download_url || `${window.location.origin}/api/versions/download/${version.id}`;
+  navigator.clipboard.writeText(url).then(() => {
+    ElMessage.success('下载链接已复制');
+  });
+};
+
+// 删除版本
+const deleteVersion = async (id) => {
+  try {
+    await ElMessageBox.confirm('确定要删除此版本吗？删除后无法恢复。', '确认删除', {
+      type: 'warning'
+    });
+
+    await api.delete(`/versions/${id}`);
+    ElMessage.success('版本删除成功');
+    loadVersions();
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.error || '删除版本失败');
+    }
+  }
+};
+
+// 监听标签页切换
+watch(activeTab, (newTab) => {
+  if (newTab === 'versions') {
+    loadVersions();
+  }
+});
 
 const checkPatchCli = async () => {
   try {
@@ -1696,4 +2099,107 @@ onMounted(() => {
   justify-content: flex-end;
   margin-bottom: 12px;
 }
+
+/* 版本管理样式 */
+.versions-section {
+  max-width: 1200px;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.section-header h3 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+}
+
+.versions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.version-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 20px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.version-item:hover {
+  border-color: #d4af7a;
+  box-shadow: 0 2px 8px rgba(212, 175, 122, 0.1);
+}
+
+.version-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.version-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.version-details {
+  flex: 1;
+}
+
+.version-desc {
+  font-size: 14px;
+  color: #1a1a1a;
+  margin: 0 0 8px 0;
+}
+
+.version-changelog {
+  background: #f8f9fa;
+  padding: 12px;
+  border-radius: 6px;
+  margin: 8px 0;
+}
+
+.version-changelog strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #1a1a1a;
+}
+
+.version-changelog pre {
+  margin: 0;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #666;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.version-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: #888;
+  flex-wrap: wrap;
+}
+
+.version-actions {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
 </style>

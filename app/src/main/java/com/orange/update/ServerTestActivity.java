@@ -346,8 +346,9 @@ public class ServerTestActivity extends AppCompatActivity {
         String finalCurrentVersion = currentVersion;
         executor.execute(() -> {
             try {
-                // 使用正确的 API 路径
-                String urlStr = serverUrl + "/api/client/check-update?version=" + finalCurrentVersion;
+                // 使用正确的 API 路径，添加 appId 参数以获取强制更新信息
+                String urlStr = serverUrl + "/api/client/check-update?version=" + finalCurrentVersion + 
+                               "&appId=demo-app-id"; // 替换为实际的 appId
                 URL url = new URL(urlStr);
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("GET");
@@ -359,11 +360,29 @@ public class ServerTestActivity extends AppCompatActivity {
 
                 if (responseCode == 200) {
                     JSONObject jsonResponse = new JSONObject(response);
+                    
+                    // 检查是否需要强制大版本更新
+                    if (jsonResponse.has("forceUpdate") && jsonResponse.getBoolean("forceUpdate")) {
+                        StringBuilder result = new StringBuilder();
+                        result.append("⚠️ 需要强制更新！\n\n");
+                        result.append("当前版本: ").append(finalCurrentVersion).append("\n");
+                        result.append("最新版本: ").append(jsonResponse.getString("latestVersion")).append("\n");
+                        result.append("下载地址: ").append(jsonResponse.getString("downloadUrl")).append("\n\n");
+                        result.append("更新说明:\n").append(jsonResponse.getString("message")).append("\n\n");
+                        result.append("⚠️ 您的版本过低，必须更新到最新版本才能继续使用。\n");
+                        result.append("热更新补丁功能不可用，请下载完整 APK 更新。");
+                        
+                        showResult(result.toString());
+                        showToast("需要强制更新到最新版本");
+                        return;
+                    }
+                    
+                    // 检查热更新补丁
                     boolean hasUpdate = jsonResponse.getBoolean("hasUpdate");
                     
                     StringBuilder result = new StringBuilder();
                     if (hasUpdate) {
-                        result.append("✓ 发现新版本！\n\n");
+                        result.append("✓ 发现热更新补丁！\n\n");
                         JSONObject patch = jsonResponse.getJSONObject("patch");
                         result.append("新版本: ").append(patch.getString("version")).append("\n");
                         result.append("补丁大小: ").append(formatSize(patch.getLong("size"))).append("\n");
@@ -372,6 +391,14 @@ public class ServerTestActivity extends AppCompatActivity {
                             result.append("\n更新说明:\n").append(patch.getString("description")).append("\n");
                         }
                         result.append("\n强制更新: ").append(patch.getBoolean("forceUpdate") ? "是" : "否");
+                        
+                        // 显示安全配置
+                        if (jsonResponse.has("securityConfig")) {
+                            JSONObject securityConfig = jsonResponse.getJSONObject("securityConfig");
+                            result.append("\n\n安全配置:");
+                            result.append("\n- 要求签名: ").append(securityConfig.getBoolean("requireSignature") ? "是" : "否");
+                            result.append("\n- 要求加密: ").append(securityConfig.getBoolean("requireEncryption") ? "是" : "否");
+                        }
                     } else {
                         result.append("✓ 已是最新版本\n\n");
                         result.append("当前版本: ").append(finalCurrentVersion).append("\n");
