@@ -107,40 +107,13 @@ app.use((err, req, res, next) => {
 });
 
 // 启动服务器
-const server = app.listen(PORT, '0.0.0.0', async () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   const address = server.address();
   console.log(`🚀 补丁服务端运行在 http://0.0.0.0:${address.port}`);
   console.log(`📊 环境: ${process.env.NODE_ENV || 'development'}`);
   console.log(`📁 上传目录: ${process.env.UPLOAD_DIR || './uploads'}`);
   console.log(`🔌 实际监听端口: ${address.port}`);
   console.log(`🌐 监听地址: ${address.address}`);
-  
-  // 初始化默认管理员
-  try {
-    const bcrypt = require('bcryptjs');
-    const db = require('./src/models/database');
-    
-    const admin = await db.get('SELECT id FROM users WHERE role = "admin"');
-    
-    if (!admin) {
-      const username = process.env.ADMIN_USERNAME || 'admin';
-      const password = process.env.ADMIN_PASSWORD || 'admin123';
-      const email = process.env.ADMIN_EMAIL || 'admin@example.com';
-      const hashedPassword = await bcrypt.hash(password, 10);
-      
-      await db.run(
-        'INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, ?)',
-        [username, hashedPassword, email, 'admin']
-      );
-      
-      console.log('✅ 默认管理员创建成功');
-      console.log(`   用户名: ${username}`);
-      console.log(`   密码: ${password}`);
-      console.log('   ⚠️  请尽快修改默认密码！');
-    }
-  } catch (error) {
-    console.error('⚠️  管理员初始化失败:', error.message);
-  }
   
   // 初始化定时任务
   const { initScheduler } = require('./src/utils/scheduler');

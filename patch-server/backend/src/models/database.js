@@ -36,7 +36,14 @@ function initDatabase() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )
-    `);
+    `, async (err) => {
+      if (err) {
+        console.error('创建用户表失败:', err);
+      } else {
+        // 用户表创建成功后，初始化默认管理员
+        await initDefaultAdmin();
+      }
+    });
 
     // 应用表
     db.run(`
@@ -126,6 +133,34 @@ function initDatabase() {
       )
     `);
   });
+}
+
+// 初始化默认管理员
+async function initDefaultAdmin() {
+  try {
+    const bcrypt = require('bcryptjs');
+    
+    const admin = await Database.get('SELECT id FROM users WHERE role = "admin"');
+    
+    if (!admin) {
+      const username = process.env.ADMIN_USERNAME || 'admin';
+      const password = process.env.ADMIN_PASSWORD || 'admin123';
+      const email = process.env.ADMIN_EMAIL || 'admin@example.com';
+      const hashedPassword = await bcrypt.hash(password, 10);
+      
+      await Database.run(
+        'INSERT INTO users (username, password, email, role) VALUES (?, ?, ?, ?)',
+        [username, hashedPassword, email, 'admin']
+      );
+      
+      console.log('✅ 默认管理员创建成功');
+      console.log(`   用户名: ${username}`);
+      console.log(`   密码: ${password}`);
+      console.log('   ⚠️  请尽快修改默认密码！');
+    }
+  } catch (error) {
+    console.error('⚠️  管理员初始化失败:', error.message);
+  }
 }
 
 // 数据库操作封装
