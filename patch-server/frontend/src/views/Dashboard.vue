@@ -291,6 +291,12 @@ const loadAlerts = async () => {
 }
 
 const loadRecentActivities = async () => {
+  // 只有管理员才能查看操作日志
+  if (user.value.role !== 'admin') {
+    recentActivities.value = [];
+    return;
+  }
+  
   try {
     const { data } = await api.getLogs({ page: 1, limit: 10 })
     recentActivities.value = data.logs || []
