@@ -45,8 +45,29 @@ dependencies {
     
     // 如果需要在设备上生成补丁，添加：
     implementation 'io.github.706412584:patch-generator-android:1.3.3'
+    
+    // 如果需要 Native 高性能引擎（可选，自动降级）
+    implementation 'io.github.706412584:patch-native:1.3.3'
+    
+    // 如果需要核心补丁引擎（通常不需要单独引入）
+    implementation 'io.github.706412584:patch-core:1.3.3'
 }
 ```
+
+**Maven Central 组件列表：**
+
+| 组件 | Maven 坐标 | 说明 |
+|------|-----------|------|
+| **update** | `io.github.706412584:update:1.3.3` | 热更新核心库，必需 |
+| **patch-generator-android** | `io.github.706412584:patch-generator-android:1.3.3` | 设备端补丁生成 |
+| **patch-native** | `io.github.706412584:patch-native:1.3.3` | Native 高性能引擎（AAR） |
+| **patch-core** | `io.github.706412584:patch-core:1.3.3` | 核心补丁引擎 |
+| **patch-cli** | [下载 JAR](https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.3.3/patch-cli-1.3.3-all.jar) | 命令行工具（独立运行） |
+
+> 💡 **提示**：
+> - `update` 库已包含基本功能，大多数情况下只需要这一个依赖
+> - `patch-native` 提供 2-3 倍性能提升，不可用时自动降级到 Java 引擎
+> - `patch-cli` 是独立的命令行工具，不需要添加到项目依赖中
 
 ### 2. 生成补丁
 
