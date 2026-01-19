@@ -1,5 +1,5 @@
-# 多阶段构建 - 前端
-FROM node:18-alpine AS frontend-builder
+# 多阶段构建 - 前端（使用 Debian 基础镜像避免 Alpine 的兼容性问题）
+FROM node:18-slim AS frontend-builder
 
 WORKDIR /app/frontend
 
