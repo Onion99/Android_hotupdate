@@ -4,13 +4,13 @@ FROM node:18-alpine AS frontend-builder
 WORKDIR /app/frontend
 
 # 复制前端 package.json
-COPY frontend/package*.json ./
+COPY patch-server/frontend/package*.json ./
 
 # 安装前端依赖
 RUN npm install
 
 # 复制前端源代码
-COPY frontend/ ./
+COPY patch-server/frontend/ ./
 
 # 构建前端
 RUN npm run build
@@ -21,13 +21,13 @@ FROM node:18-alpine
 WORKDIR /app
 
 # 复制后端 package.json
-COPY backend/package*.json ./
+COPY patch-server/backend/package*.json ./
 
 # 安装后端依赖
 RUN npm install --production
 
 # 复制后端源代码
-COPY backend/ ./
+COPY patch-server/backend/ ./
 
 # 从前端构建阶段复制构建产物
 COPY --from=frontend-builder /app/frontend/dist ./public
