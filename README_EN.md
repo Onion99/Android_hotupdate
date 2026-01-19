@@ -35,7 +35,6 @@ We provide a free patch hosting service for testing and learning:
 
 - **Service URL**: https://android-hotupdateserver.zeabur.app
 - **Admin Dashboard**: https://android-hotupdateserver.zeabur.app/dashboard
-- **Default Account**: admin / 522623 (Please change password after first login)
 
 **Features**:
 - ✅ App Management - Create and manage multiple applications

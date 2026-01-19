@@ -360,7 +360,6 @@ npm run dev  # http://localhost:5173
 
 - **服务地址**: https://android-hotupdateserver.zeabur.app
 - **管理后台**: https://android-hotupdateserver.zeabur.app/dashboard
-- **默认账号**: admin / 522623（首次登录请修改密码）
 
 **功能特性**:
 - ✅ 应用管理 - 创建和管理多个应用
