@@ -40,16 +40,16 @@
 
 ```groovy
 dependencies {
-    // 热更新核心库（包含完整功能）
+    // 热更新核心库（必须，包含完整功能）
     implementation 'io.github.706412584:update:1.3.3'
     
-    // 如果需要在设备上生成补丁，添加：
+    // 如果需要在设备上生成补丁（不推荐，推荐直接使用官方demo的apk），添加：
     implementation 'io.github.706412584:patch-generator-android:1.3.3'
     
     // 如果需要 Native 高性能引擎（可选，自动降级）
     implementation 'io.github.706412584:patch-native:1.3.3'
     
-    // 如果需要核心补丁引擎（通常不需要单独引入）
+    // 如果需要核心补丁引擎（可选，通常不需要单独引入）
     implementation 'io.github.706412584:patch-core:1.3.3'
 }
 ```
