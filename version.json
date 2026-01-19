@@ -1,0 +1,33 @@
+{
+  "latest_version": "1.4.1",
+  "min_version": "1.4.0",
+  "update_url": "https://github.com/706412584/Android_hotupdate/releases",
+  "patches": [
+    {
+      "version": "1.4.1",
+      "patch_id": "patch_1.4.1",
+      "base_version": "1.4.0",
+      "download_url": "https://github.com/706412584/Android_hotupdate/releases/download/v1.4.1/patch-v1.4.1.zip",
+      "md5": "",
+      "size": 0,
+      "description": "修复重复应用补丁导致 SIGBUS 崩溃问题",
+      "force_update": false,
+      "create_time": "2025-01-19T10:00:00Z",
+      "features": [
+        "修复 ResourceMerger 使用错误的原始 APK 路径",
+        "添加 MD5 重复补丁检测",
+        "修复 PatchStorage 目录创建问题"
+      ]
+    }
+  ],
+  "changelog": {
+    "1.4.1": {
+      "date": "2025-01-19",
+      "changes": [
+        "🐛 修复重复应用补丁导致 SIGBUS 崩溃",
+        "✨ 添加补丁 MD5 重复检测",
+        "🔧 优化资源合并逻辑"
+      ]
+    }
+  }
+}
