@@ -3,6 +3,24 @@ const router = express.Router();
 const db = require('../models/database');
 const { authenticateToken } = require('../middleware/auth');
 
+// 获取通知配置
+router.get('/config', authenticateToken, async (req, res) => {
+  try {
+    // 返回通知配置（从环境变量读取）
+    res.json({
+      emailEnabled: process.env.EMAIL_ENABLED === 'true',
+      webhookEnabled: process.env.WEBHOOK_ENABLED === 'true',
+      smtpHost: process.env.SMTP_HOST || '',
+      smtpPort: process.env.SMTP_PORT || 587,
+      smtpUser: process.env.SMTP_USER || '',
+      webhookUrl: process.env.WEBHOOK_URL || ''
+    });
+  } catch (error) {
+    console.error('获取通知配置失败:', error);
+    res.status(500).json({ error: '获取通知配置失败' });
+  }
+});
+
 // 获取用户通知列表
 router.get('/', authenticateToken, async (req, res) => {
   try {

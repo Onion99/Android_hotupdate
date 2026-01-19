@@ -56,6 +56,10 @@ function initDatabase() {
         icon VARCHAR(255),
         owner_id INTEGER NOT NULL,
         status VARCHAR(20) DEFAULT 'active',
+        review_status VARCHAR(20) DEFAULT 'approved',
+        review_note TEXT,
+        reviewed_by INTEGER,
+        reviewed_at DATETIME,
         
         -- 安全配置
         require_signature BOOLEAN DEFAULT 0,
@@ -67,7 +71,8 @@ function initDatabase() {
         
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (owner_id) REFERENCES users(id)
+        FOREIGN KEY (owner_id) REFERENCES users(id),
+        FOREIGN KEY (reviewed_by) REFERENCES users(id)
       )
     `);
 
@@ -132,6 +137,42 @@ function initDatabase() {
         FOREIGN KEY (user_id) REFERENCES users(id)
       )
     `);
+
+    // 通知表
+    db.run(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        type VARCHAR(50) NOT NULL,
+        title VARCHAR(255) NOT NULL,
+        message TEXT NOT NULL,
+        link VARCHAR(255),
+        data TEXT,
+        is_read BOOLEAN DEFAULT 0,
+        read_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+      )
+    `);
+
+    // 数据库迁移：为 apps 表添加审核相关字段（如果不存在）
+    db.all("PRAGMA table_info(apps)", [], (err, columns) => {
+      if (err) {
+        console.error('检查 apps 表结构失败:', err);
+        return;
+      }
+      
+      const hasReviewStatus = columns.some(col => col.name === 'review_status');
+      
+      if (!hasReviewStatus) {
+        console.log('🔄 迁移数据库：添加审核相关字段...');
+        db.run(`ALTER TABLE apps ADD COLUMN review_status VARCHAR(20) DEFAULT 'approved'`);
+        db.run(`ALTER TABLE apps ADD COLUMN review_note TEXT`);
+        db.run(`ALTER TABLE apps ADD COLUMN reviewed_by INTEGER`);
+        db.run(`ALTER TABLE apps ADD COLUMN reviewed_at DATETIME`);
+        console.log('✅ 数据库迁移完成');
+      }
+    });
   });
 }
 
