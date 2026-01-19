@@ -543,8 +543,65 @@ const handleCommand = async (command) => {
 }
 
 @media (max-width: 768px) {
+  .layout-container {
+    overflow-x: hidden;
+  }
+  
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    z-index: 1000;
+    transform: translateX(-100%);
+    transition: transform 0.3s;
+  }
+  
+  .sidebar.show {
+    transform: translateX(0);
+  }
+  
+  .header {
+    padding: 0 12px;
+  }
+  
+  .header-left {
+    flex: 1;
+    min-width: 0;
+  }
+  
   .global-search {
-    width: 200px;
+    width: 150px;
+    margin-left: 8px;
+  }
+  
+  .header-right {
+    gap: 8px;
+  }
+  
+  .main-content {
+    padding: 12px;
+    width: 100%;
+    overflow-x: hidden;
+  }
+  
+  /* 移动端隐藏侧边栏，使用汉堡菜单 */
+  .el-aside {
+    width: 0 !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .global-search {
+    display: none;
+  }
+  
+  .header-left h3 {
+    font-size: 16px;
+  }
+  
+  .main-content {
+    padding: 8px;
   }
 }
 </style>

@@ -1,0 +1,215 @@
+/* 移动端全局样式优化 */
+
+/* 确保所有容器不会超出屏幕 */
+* {
+  box-sizing: border-box;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  /* Element Plus 表格优化 */
+  .el-table {
+    font-size: 12px;
+  }
+  
+  .el-table th,
+  .el-table td {
+    padding: 8px 4px;
+  }
+  
+  /* 卡片优化 */
+  .el-card {
+    margin-bottom: 12px;
+  }
+  
+  .el-card__header {
+    padding: 12px;
+  }
+  
+  .el-card__body {
+    padding: 12px;
+  }
+  
+  /* 表单优化 */
+  .el-form-item {
+    margin-bottom: 16px;
+  }
+  
+  .el-form-item__label {
+    font-size: 13px;
+  }
+  
+  /* 按钮组优化 */
+  .el-button-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .el-button {
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+  
+  /* 分页器优化 */
+  .el-pagination {
+    padding: 12px 0;
+    justify-content: center;
+  }
+  
+  .el-pagination .el-pager li {
+    min-width: 28px;
+    height: 28px;
+    line-height: 28px;
+    font-size: 12px;
+  }
+  
+  /* 对话框优化 */
+  .el-dialog {
+    width: 95% !important;
+    margin: 0 auto;
+  }
+  
+  .el-dialog__header {
+    padding: 16px;
+  }
+  
+  .el-dialog__body {
+    padding: 16px;
+    max-height: 60vh;
+    overflow-y: auto;
+  }
+  
+  /* 抽屉优化 */
+  .el-drawer {
+    width: 85% !important;
+  }
+  
+  /* 下拉菜单优化 */
+  .el-dropdown-menu {
+    max-width: 90vw;
+  }
+  
+  /* 输入框优化 */
+  .el-input__inner,
+  .el-textarea__inner {
+    font-size: 14px;
+  }
+  
+  /* 标签优化 */
+  .el-tag {
+    font-size: 11px;
+    padding: 0 6px;
+    height: 22px;
+    line-height: 22px;
+  }
+  
+  /* 统计卡片优化 */
+  .stat-card {
+    margin-bottom: 12px;
+  }
+  
+  .stat-value {
+    font-size: 20px !important;
+  }
+  
+  .stat-title {
+    font-size: 12px !important;
+  }
+  
+  /* 图表容器优化 */
+  .chart-container {
+    height: 250px !important;
+  }
+  
+  /* 搜索框优化 */
+  .search-box {
+    width: 100% !important;
+    margin-bottom: 12px;
+  }
+  
+  /* 操作按钮组优化 */
+  .action-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  /* 面包屑优化 */
+  .el-breadcrumb {
+    font-size: 12px;
+  }
+  
+  /* 标签页优化 */
+  .el-tabs__item {
+    font-size: 13px;
+    padding: 0 12px;
+  }
+  
+  /* 步骤条优化 */
+  .el-step__title {
+    font-size: 13px;
+  }
+  
+  .el-step__description {
+    font-size: 11px;
+  }
+}
+
+/* 小屏幕手机优化 */
+@media (max-width: 480px) {
+  .el-table {
+    font-size: 11px;
+  }
+  
+  .el-button {
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+  
+  .el-dialog {
+    width: 98% !important;
+  }
+  
+  .el-drawer {
+    width: 90% !important;
+  }
+  
+  .stat-value {
+    font-size: 18px !important;
+  }
+  
+  .chart-container {
+    height: 200px !important;
+  }
+  
+  /* 隐藏不重要的列 */
+  .hide-on-mobile {
+    display: none !important;
+  }
+}
+
+/* 横屏优化 */
+@media (max-width: 768px) and (orientation: landscape) {
+  .el-dialog__body {
+    max-height: 50vh;
+  }
+}
+
+/* 防止内容溢出 */
+.el-table__body-wrapper {
+  overflow-x: auto;
+}
+
+/* 确保表格在移动端可以横向滚动 */
+@media (max-width: 768px) {
+  .el-table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+  
+  .el-table__body-wrapper {
+    overflow-x: auto;
+  }
+}
