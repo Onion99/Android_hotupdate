@@ -1,0 +1,19 @@
+{
+  "name": "patch-server",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "deploy": {
+    "env": {
+      "NODE_ENV": "production",
+      "PORT": "3000"
+    }
+  },
+  "domains": [],
+  "ports": [
+    {
+      "port": 3000,
+      "protocol": "http"
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+# 多阶段构建 - 前端
+FROM node:18-alpine AS frontend-builder
+
+WORKDIR /app/frontend
+
+# 复制前端 package.json
+COPY frontend/package*.json ./
+
+# 安装前端依赖
+RUN npm install
+
+# 复制前端源代码
+COPY frontend/ ./
+
+# 构建前端
+RUN npm run build
+
+# 多阶段构建 - 后端
+FROM node:18-alpine
+
+WORKDIR /app
+
+# 复制后端 package.json
+COPY backend/package*.json ./
+
+# 安装后端依赖
+RUN npm install --production
+
+# 复制后端源代码
+COPY backend/ ./
+
+# 从前端构建阶段复制构建产物
+COPY --from=frontend-builder /app/frontend/dist ./public
+
+# 创建必要的目录
+RUN mkdir -p uploads backups
+
+# 暴露端口
+EXPOSE 3000
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000/api/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+
+# 启动命令
+CMD ["node", "server.js"]

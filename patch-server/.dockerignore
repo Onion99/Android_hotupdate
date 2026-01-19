@@ -1,0 +1,64 @@
+# Node modules
+node_modules
+*/node_modules
+
+# 日志文件
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 环境变量文件
+.env
+.env.local
+.env.*.local
+
+# 编辑器
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# 构建产物
+dist
+build
+*.tgz
+
+# 测试
+coverage
+.nyc_output
+
+# 数据库文件（开发环境）
+*.db
+*.db-journal
+
+# 上传文件（开发环境）
+uploads/*
+!uploads/.gitkeep
+
+# 备份文件
+backups/*
+!backups/.gitkeep
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# 文档
+README.md
+docs/
+
+# CI/CD
+.github
+.gitlab-ci.yml
