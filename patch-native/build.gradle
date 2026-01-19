@@ -3,6 +3,9 @@ plugins {
     id 'maven-publish'
 }
 
+// 应用通用的 Maven 发布配置
+apply from: "${rootProject.projectDir}/maven-publish.gradle"
+
 // 检测是否在JitPack环境中构建
 def isJitPackBuild = System.getenv("JITPACK") == "true" || 
                      gradle.startParameter.taskNames.toString().contains("publishToMavenLocal")
@@ -88,6 +91,7 @@ dependencies {
 afterEvaluate {
     publishing {
         publications {
+            // JitPack 发布配置
             release(MavenPublication) {
                 groupId = 'com.github.706412584'
                 artifactId = 'patch-native'
@@ -96,6 +100,27 @@ afterEvaluate {
                 artifact bundleReleaseAar
                 artifact androidSourcesJar
             }
+            
+            // Maven Central 发布配置
+            mavenJava(MavenPublication) {
+                groupId = pomGroupId
+                artifactId = 'patch-native'
+                version = pomVersion
+                
+                // 发布 AAR
+                artifact bundleReleaseAar
+                
+                // 发布 sources 和 javadoc
+                artifact androidSourcesJar
+                artifact androidJavadocsJar
+                
+                // 配置 POM
+                pom {
+                    configurePom(it)
+                    name = 'Android Hot Update - Native Patch Engine'
+                    description = 'Native C++ engine for high-performance patch generation and application using BsDiff algorithm'
+                }
+            }
         }
     }
 }
@@ -103,4 +128,9 @@ afterEvaluate {
 task androidSourcesJar(type: Jar) {
     archiveClassifier.set('sources')
     from android.sourceSets.main.java.srcDirs
+}
+
+task androidJavadocsJar(type: Jar) {
+    archiveClassifier.set('javadoc')
+    // Android 库通常不生成 Javadoc，使用空 JAR
 }

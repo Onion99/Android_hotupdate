@@ -2,12 +2,56 @@
 
 ## 发布的模块
 
-从 v1.3.2 开始，发布脚本包含以下 **4 个模块**：
+从 v1.3.2 开始，发布脚本包含以下 **5 个模块**：
 
-1. **patch-core** - 核心补丁生成库
-2. **patch-generator-android** - Android 设备端补丁生成器
-3. **patch-cli** - 命令行工具（包含 fat JAR）
-4. **update** - 热更新核心库
+1. **patch-core** - 核心补丁生成库（JAR）
+2. **patch-native** - Native C++ 引擎（AAR，包含 SO 库）
+3. **patch-generator-android** - Android 设备端补丁生成器（AAR）
+4. **patch-cli** - 命令行工具（JAR，包含 fat JAR）
+5. **update** - 热更新核心库（AAR）
+
+## patch-native 发布说明
+
+### 发布内容
+
+patch-native 是 Native C++ 引擎，包含高性能的 BsDiff 算法实现。
+
+**AAR 文件内容**：
+- Java/Kotlin 接口代码
+- Native SO 库（4 个架构）：
+  - `arm64-v8a/libpatch-native.so`
+  - `armeabi-v7a/libpatch-native.so`
+  - `x86/libpatch-native.so`
+  - `x86_64/libpatch-native.so`
+
+### Maven 坐标
+
+```xml
+<dependency>
+    <groupId>io.github.706412584</groupId>
+    <artifactId>patch-native</artifactId>
+    <version>1.3.2</version>
+    <type>aar</type>
+</dependency>
+```
+
+### Gradle 依赖
+
+```gradle
+implementation 'io.github.706412584:patch-native:1.3.2'
+```
+
+### 下载链接
+
+- **AAR**: https://repo1.maven.org/maven2/io/github/706412584/patch-native/1.3.2/patch-native-1.3.2.aar
+- **POM**: https://repo1.maven.org/maven2/io/github/706412584/patch-native/1.3.2/patch-native-1.3.2.pom
+
+### 特性
+
+- ✅ 高性能 BsDiff/BsPatch 算法
+- ✅ 支持 4 个主流架构
+- ✅ 自动降级到 Java 实现
+- ✅ JNI 接口封装
 
 ## patch-cli 发布说明
 
@@ -71,7 +115,7 @@ publish-maven.bat
 ```
 
 这会：
-1. 编译 4 个模块
+1. 编译 5 个模块
 2. 发布到本地仓库
 3. 创建 bundle.zip
 4. 上传到 Maven Central
@@ -135,6 +179,22 @@ java -jar patch-cli-1.3.2-all.jar --version
 ```
 
 ## 常见问题
+
+### Q: 为什么需要发布 patch-native？
+
+A: patch-native 提供高性能的 Native 引擎：
+- BsDiff 算法的 C++ 实现，比 Java 快 2-3 倍
+- 支持大文件的二进制差异计算
+- 包含预编译的 SO 库，用户无需编译
+- 自动降级机制，Native 不可用时使用 Java 实现
+
+### Q: patch-native 包含哪些架构的 SO 库？
+
+A: 包含 4 个主流架构：
+- `arm64-v8a` - 64 位 ARM（主流手机）
+- `armeabi-v7a` - 32 位 ARM（旧手机）
+- `x86` - 32 位 x86（模拟器）
+- `x86_64` - 64 位 x86（模拟器）
 
 ### Q: 为什么需要发布 patch-cli？
 
@@ -201,4 +261,4 @@ A:
 ---
 
 **最后更新**: 2026-01-19  
-**版本**: 1.3.2
+**版本**: 1.3.3

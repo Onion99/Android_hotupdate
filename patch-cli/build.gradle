@@ -68,6 +68,32 @@ tasks.register('fatJar', Jar) {
 // Build fat JAR when running 'build' task
 build.dependsOn fatJar
 
+// 创建 sources JAR
+task sourceJar(type: Jar) {
+    archiveClassifier.set('sources')
+    from sourceSets.main.allSource
+}
+
+// 创建 javadoc JAR
+task javadocJar(type: Jar) {
+    archiveClassifier.set('javadoc')
+    from javadoc.destinationDir
+    dependsOn javadoc
+}
+
+// 配置 Javadoc 任务
+javadoc {
+    options.encoding = 'UTF-8'
+    options.charSet = 'UTF-8'
+    options.author = true
+    options.version = true
+    options.links = [
+        'https://docs.oracle.com/en/java/javase/11/docs/api/'
+    ]
+    // 忽略警告
+    failOnError = false
+}
+
 test {
     // Use JUnit 4 for tests
     useJUnit()
@@ -94,6 +120,12 @@ publishing {
             
             // 也发布普通 JAR
             from components.java
+            
+            // 发布 sources JAR
+            artifact sourceJar
+            
+            // 发布 javadoc JAR
+            artifact javadocJar
             
             // 配置 POM
             pom {
