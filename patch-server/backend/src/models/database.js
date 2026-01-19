@@ -155,6 +155,26 @@ function initDatabase() {
       )
     `);
 
+    // 系统配置表
+    db.run(`
+      CREATE TABLE IF NOT EXISTS system_config (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        key VARCHAR(100) UNIQUE NOT NULL,
+        value TEXT,
+        description TEXT,
+        type VARCHAR(20) DEFAULT 'string',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `, (err) => {
+      if (err) {
+        console.error('创建系统配置表失败:', err);
+      } else {
+        // 初始化默认系统配置
+        initSystemConfig();
+      }
+    });
+
     // 数据库迁移：为 apps 表添加审核相关字段（如果不存在）
     db.all("PRAGMA table_info(apps)", [], (err, columns) => {
       if (err) {
@@ -162,15 +182,33 @@ function initDatabase() {
         return;
       }
       
-      const hasReviewStatus = columns.some(col => col.name === 'review_status');
+      const columnNames = columns.map(col => col.name);
+      const missingColumns = [];
       
-      if (!hasReviewStatus) {
+      if (!columnNames.includes('review_status')) {
+        missingColumns.push({ name: 'review_status', sql: `ALTER TABLE apps ADD COLUMN review_status VARCHAR(20) DEFAULT 'approved'` });
+      }
+      if (!columnNames.includes('review_note')) {
+        missingColumns.push({ name: 'review_note', sql: `ALTER TABLE apps ADD COLUMN review_note TEXT` });
+      }
+      if (!columnNames.includes('reviewed_by')) {
+        missingColumns.push({ name: 'reviewed_by', sql: `ALTER TABLE apps ADD COLUMN reviewed_by INTEGER` });
+      }
+      if (!columnNames.includes('reviewed_at')) {
+        missingColumns.push({ name: 'reviewed_at', sql: `ALTER TABLE apps ADD COLUMN reviewed_at DATETIME` });
+      }
+      
+      if (missingColumns.length > 0) {
         console.log('🔄 迁移数据库：添加审核相关字段...');
-        db.run(`ALTER TABLE apps ADD COLUMN review_status VARCHAR(20) DEFAULT 'approved'`);
-        db.run(`ALTER TABLE apps ADD COLUMN review_note TEXT`);
-        db.run(`ALTER TABLE apps ADD COLUMN reviewed_by INTEGER`);
-        db.run(`ALTER TABLE apps ADD COLUMN reviewed_at DATETIME`);
-        console.log('✅ 数据库迁移完成');
+        missingColumns.forEach(col => {
+          db.run(col.sql, (err) => {
+            if (err) {
+              console.error(`添加 ${col.name} 失败:`, err);
+            } else {
+              console.log(`✅ 添加 ${col.name} 成功`);
+            }
+          });
+        });
       }
     });
   });
@@ -201,6 +239,35 @@ async function initDefaultAdmin() {
     }
   } catch (error) {
     console.error('⚠️  管理员初始化失败:', error.message);
+  }
+}
+
+// 初始化系统配置
+async function initSystemConfig() {
+  try {
+    const defaultConfigs = [
+      { key: 'site_name', value: 'Android 热更新补丁管理系统', description: '网站名称', type: 'string' },
+      { key: 'max_file_size', value: '104857600', description: '最大文件上传大小（字节）', type: 'number' },
+      { key: 'allow_registration', value: 'true', description: '是否允许用户注册', type: 'boolean' },
+      { key: 'require_app_review', value: 'false', description: '是否需要应用审核', type: 'boolean' },
+      { key: 'auto_backup', value: 'true', description: '是否自动备份', type: 'boolean' },
+      { key: 'backup_retention_days', value: '7', description: '备份保留天数', type: 'number' },
+      { key: 'log_retention_days', value: '30', description: '日志保留天数', type: 'number' }
+    ];
+    
+    for (const config of defaultConfigs) {
+      const existing = await Database.get('SELECT id FROM system_config WHERE key = ?', [config.key]);
+      if (!existing) {
+        await Database.run(
+          'INSERT INTO system_config (key, value, description, type) VALUES (?, ?, ?, ?)',
+          [config.key, config.value, config.description, config.type]
+        );
+      }
+    }
+    
+    console.log('✅ 系统配置初始化完成');
+  } catch (error) {
+    console.error('⚠️  系统配置初始化失败:', error.message);
   }
 }
 
