@@ -563,7 +563,7 @@ const goToPatches = () => {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
 }
 
@@ -579,6 +579,7 @@ const goToPatches = () => {
   .quick-actions {
     flex-direction: column;
     align-items: stretch;
+    justify-content: flex-start;
   }
   
   .quick-actions .el-button {
