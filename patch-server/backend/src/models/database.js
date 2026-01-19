@@ -246,7 +246,7 @@ async function initDefaultAdmin() {
 async function initSystemConfig() {
   try {
     const defaultConfigs = [
-      { key: 'site_name', value: 'Android 热更新补丁管理系统', description: '网站名称', type: 'string' },
+      { key: 'site_name', value: '热更新管理平台', description: '网站名称', type: 'string' },
       { key: 'max_file_size', value: '104857600', description: '最大文件上传大小（字节）', type: 'number' },
       { key: 'allow_registration', value: 'true', description: '是否允许用户注册', type: 'boolean' },
       { key: 'require_app_review', value: 'false', description: '是否需要应用审核', type: 'boolean' },

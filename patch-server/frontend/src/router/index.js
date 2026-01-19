@@ -52,7 +52,7 @@ const routes = [
         path: 'patches',
         name: 'Patches',
         component: () => import('@/views/Patches.vue'),
-        meta: { title: '补丁管理', icon: 'Files' }
+        meta: { title: '补丁列表', icon: 'Files' }
       },
       {
         path: 'stats',

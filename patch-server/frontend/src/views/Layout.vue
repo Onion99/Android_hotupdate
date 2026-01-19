@@ -16,7 +16,7 @@
     >
       <div class="logo">
         <el-icon v-if="collapsed" :size="28" color="#667eea"><Box /></el-icon>
-        <h2 v-else>补丁管理</h2>
+        <h2 v-else>热更新管理平台</h2>
       </div>
       
       <el-menu
@@ -220,7 +220,7 @@ const allRoutes = [
   { path: '/apps', meta: { title: '我的应用', icon: 'Box' } },
   { path: '/all-apps', meta: { title: '应用列表', icon: 'List', adminOnly: true } },
   { path: '/dashboard', meta: { title: '仪表板', icon: 'DataAnalysis' } },
-  { path: '/patches', meta: { title: '补丁管理', icon: 'Files' } },
+  { path: '/patches', meta: { title: '补丁列表', icon: 'Files' } },
   { path: '/stats', meta: { title: '统计分析', icon: 'TrendCharts' } },
   { path: '/users', meta: { title: '用户管理', icon: 'User', adminOnly: true } },
   { path: '/logs', meta: { title: '操作日志', icon: 'Document', adminOnly: true } },

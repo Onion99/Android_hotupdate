@@ -95,7 +95,7 @@
           <template #header>
             <div class="card-header">
               <span>最近活动</span>
-              <el-link type="primary" @click="goToLogs">查看全部</el-link>
+              <el-link v-if="user.role === 'admin'" type="primary" @click="goToLogs">查看全部</el-link>
             </div>
           </template>
           <el-timeline v-if="recentActivities.length > 0">
