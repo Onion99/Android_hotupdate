@@ -1,10 +1,14 @@
 const bcrypt = require('bcryptjs');
-const db = require('../src/models/database');
 require('dotenv').config();
 
 async function initDatabase() {
   try {
     console.log('🔧 初始化数据库...');
+
+    // 等待一下让 database.js 中的表创建完成
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    const db = require('../src/models/database');
 
     // 检查是否已有管理员用户
     const admin = await db.get(
@@ -13,6 +17,8 @@ async function initDatabase() {
 
     if (admin) {
       console.log('✅ 管理员用户已存在');
+      await db.close();
+      process.exit(0);
       return;
     }
 
@@ -33,11 +39,12 @@ async function initDatabase() {
     console.log(`   密码: ${password}`);
     console.log('   ⚠️  请尽快修改默认密码！');
 
-  } catch (error) {
-    console.error('❌ 初始化失败:', error);
-  } finally {
     await db.close();
     process.exit(0);
+
+  } catch (error) {
+    console.error('❌ 初始化失败:', error);
+    process.exit(1);
   }
 }
 
