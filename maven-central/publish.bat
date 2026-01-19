@@ -71,17 +71,18 @@ exit /b 1
 :QUICK_PUBLISH
 echo.
 echo ========================================
-echo Quick Publish (3 modules)
+echo Quick Publish (4 modules)
 echo ========================================
 echo.
 echo Publishing modules:
 echo   - patch-core (Core patch library)
 echo   - patch-generator-android (Android patch generator)
+echo   - patch-cli (Command-line tool)
 echo   - update (Hot update core library)
 echo.
 echo [1/3] Publishing to local repository...
 cd ..
-call gradlew.bat :patch-core:publishMavenPublicationToLocalRepository :patch-generator-android:publishMavenPublicationToLocalRepository :update:publishMavenPublicationToLocalRepository
+call gradlew.bat :patch-core:publishMavenPublicationToLocalRepository :patch-generator-android:publishMavenPublicationToLocalRepository :patch-cli:publishMavenPublicationToLocalRepository :update:publishMavenPublicationToLocalRepository
 if errorlevel 1 (
     echo [ERROR] Publish failed
     pause
@@ -96,6 +97,10 @@ xcopy /E /I /Y "io" "..\..\..\temp_bundle_build\io"
 cd ..\..\..
 
 cd patch-generator-android\build\repo
+xcopy /E /I /Y "io" "..\..\..\temp_bundle_build\io"
+cd ..\..\..
+
+cd patch-cli\build\repo
 xcopy /E /I /Y "io" "..\..\..\temp_bundle_build\io"
 cd ..\..\..
 
@@ -136,6 +141,7 @@ echo.
 echo Published modules:
 echo   - patch-core:%VERSION%
 echo   - patch-generator-android:%VERSION%
+echo   - patch-cli:%VERSION% (with -all classifier for fat JAR)
 echo   - update:%VERSION%
 echo.
 echo Next steps:
@@ -150,12 +156,13 @@ exit /b 0
 :FULL_PUBLISH
 echo.
 echo ========================================
-echo Full Publish (3 modules)
+echo Full Publish (4 modules)
 echo ========================================
 echo.
 echo Publishing modules:
 echo   - patch-core (Core patch library)
 echo   - patch-generator-android (Android patch generator)
+echo   - patch-cli (Command-line tool)
 echo   - update (Hot update core library)
 echo.
 echo [1/5] Cleaning build...
@@ -168,7 +175,7 @@ call gradlew.bat build -x test
 
 echo.
 echo [3/5] Publishing to local repository...
-call gradlew.bat :patch-core:publishMavenPublicationToLocalRepository :patch-generator-android:publishMavenPublicationToLocalRepository :update:publishMavenPublicationToLocalRepository
+call gradlew.bat :patch-core:publishMavenPublicationToLocalRepository :patch-generator-android:publishMavenPublicationToLocalRepository :patch-cli:publishMavenPublicationToLocalRepository :update:publishMavenPublicationToLocalRepository
 if errorlevel 1 (
     echo [ERROR] Build failed
     pause
@@ -183,6 +190,10 @@ xcopy /E /I /Y "io" "..\..\..\temp_bundle_build\io"
 cd ..\..\..
 
 cd patch-generator-android\build\repo
+xcopy /E /I /Y "io" "..\..\..\temp_bundle_build\io"
+cd ..\..\..
+
+cd patch-cli\build\repo
 xcopy /E /I /Y "io" "..\..\..\temp_bundle_build\io"
 cd ..\..\..
 
@@ -223,6 +234,7 @@ echo.
 echo Published modules:
 echo   - patch-core:%VERSION%
 echo   - patch-generator-android:%VERSION%
+echo   - patch-cli:%VERSION% (with -all classifier for fat JAR)
 echo   - update:%VERSION%
 echo.
 echo Next steps:

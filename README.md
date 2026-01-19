@@ -19,7 +19,6 @@
 - 🎯 **兼容性好** - 支持 Android 5.0+ (API 21+)
 - ⚡ **自动降级** - Native 不可用时自动使用 Java 引擎
 - 🌐 **管理后台** - 🆕 Web 管理后台，支持灰度发布、统计分析
-- 🔍 **字符串检测** - 🆕 v1.3.2 修复字符串常量修改检测问题
 
 
 ## 📚 文档导航
@@ -42,10 +41,10 @@
 ```groovy
 dependencies {
     // 热更新核心库（包含完整功能）
-    implementation 'io.github.706412584:update:1.3.2'
+    implementation 'io.github.706412584:update:1.3.3'
     
     // 如果需要在设备上生成补丁，添加：
-    implementation 'io.github.706412584:patch-generator-android:1.3.2'
+    implementation 'io.github.706412584:patch-generator-android:1.3.3'
 }
 ```
 
@@ -55,10 +54,10 @@ dependencies {
 
 ```bash
 # 下载 patch-cli
-wget https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.3.2/patch-cli-1.3.2-all.jar
+wget https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.3.3/patch-cli-1.3.3-all.jar
 
 # 生成带签名的补丁
-java -jar patch-cli-1.3.2-all.jar \
+java -jar patch-cli-1.3.3-all.jar \
   --base app-v1.0.apk \
   --new app-v1.1.apk \
   --output patch.zip \
@@ -228,7 +227,7 @@ helper.applyPatchWithZipPassword(patchFile, zipPassword, callback);
 > - [组合使用签名和加密](docs/USAGE.md#组合使用签名和加密) - 最高安全级别
 > - [安全最佳实践](docs/USAGE.md#安全最佳实践) - 生产环境配置建议
 
-### 防篡改保护（v1.3.2 新增）
+### 防篡改保护
 
 系统自动提供补丁完整性验证和自动恢复功能：
 
@@ -294,7 +293,7 @@ if (intent != null) {
 | **update** | 热更新 SDK，补丁应用和加载 | - |
 | **patch-core** | 核心引擎，APK 解析、差异比较 | [README](patch-core/README.md) |
 | **patch-native** | Native SO 库，BsDiff 算法 | [README](patch-native/README.md) |
-| **patch-cli** | 命令行工具，独立运行，[可直接下载](https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.3.2/patch-cli-1.3.2-all.jar) | [README](patch-cli/README.md) |
+| **patch-cli** | 命令行工具，独立运行，[可直接下载](https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.3.3/patch-cli-1.3.3-all.jar) | [README](patch-cli/README.md) |
 | **patch-gradle-plugin** | Gradle 插件，构建集成 | [README](patch-gradle-plugin/README.md) |
 | **patch-server** | 🆕 补丁管理服务端，Web 管理后台 + RESTful API | [README](patch-server/README.md) |
 
