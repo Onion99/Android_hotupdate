@@ -40,6 +40,9 @@ app.use('/api/', limiter);
 // 日志中间件
 app.use(loggerMiddleware);
 
+// 静态文件服务（前端页面）
+app.use(express.static(path.join(__dirname, 'public')));
+
 // 静态文件服务（补丁下载）
 app.use('/downloads', express.static(path.join(__dirname, 'uploads')));
 
@@ -65,6 +68,15 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime()
   });
+});
+
+// 前端路由支持（SPA）- 所有非 API 请求返回 index.html
+app.get('*', (req, res, next) => {
+  // 如果是 API 请求，跳过
+  if (req.path.startsWith('/api/') || req.path.startsWith('/downloads/')) {
+    return next();
+  }
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 // 404 处理
