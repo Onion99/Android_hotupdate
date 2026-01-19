@@ -84,9 +84,11 @@ public class ServerTestActivity extends AppCompatActivity {
     }
 
     private void updateButtonStates(boolean loggedIn) {
-        btnGetApps.setEnabled(loggedIn);
-        btnGetPatches.setEnabled(loggedIn);
-        btnCheckUpdate.setEnabled(loggedIn);
+        mainHandler.post(() -> {
+            btnGetApps.setEnabled(loggedIn);
+            btnGetPatches.setEnabled(loggedIn);
+            btnCheckUpdate.setEnabled(loggedIn);
+        });
     }
 
     private void showLoading(boolean show) {
