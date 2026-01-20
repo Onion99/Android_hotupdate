@@ -68,7 +68,7 @@ router.get('/:appId', authenticateToken, async (req, res) => {
     }
 
     // 获取版本列表
-    const versions = await db.all(`
+    const versions = await db.query(`
       SELECT 
         v.*,
         u.username as creator_name

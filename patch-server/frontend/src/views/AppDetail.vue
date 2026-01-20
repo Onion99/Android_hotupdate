@@ -1726,11 +1726,40 @@ const copyAppId = () => {
 };
 
 const copyText = (text) => {
-  navigator.clipboard.writeText(text).then(() => {
-    ElMessage.success('已复制到剪贴板');
-  }).catch(() => {
-    ElMessage.error('复制失败');
-  });
+  // 优先使用 Clipboard API
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(() => {
+      ElMessage.success('已复制到剪贴板');
+    }).catch(() => {
+      // 降级到传统方法
+      fallbackCopyText(text);
+    });
+  } else {
+    // 降级到传统方法
+    fallbackCopyText(text);
+  }
+};
+
+// 降级复制方法
+const fallbackCopyText = (text) => {
+  try {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const successful = document.execCommand('copy');
+    document.body.removeChild(textarea);
+    
+    if (successful) {
+      ElMessage.success('已复制到剪贴板');
+    } else {
+      ElMessage.error('复制失败，请手动复制');
+    }
+  } catch (err) {
+    ElMessage.error('复制失败，请手动复制');
+  }
 };
 
 const copyApiExample = (type) => {
