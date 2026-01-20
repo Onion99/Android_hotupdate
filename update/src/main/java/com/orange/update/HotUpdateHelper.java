@@ -541,6 +541,72 @@ public class HotUpdateHelper {
             }
 
             logD("Loading applied patch: " + appliedPatchId);
+            
+            // ✅ 检查 APK 版本是否变化（覆盖安装检测）
+            try {
+                android.content.pm.PackageInfo packageInfo = context.getPackageManager()
+                    .getPackageInfo(context.getPackageName(), 0);
+                
+                // 使用反射避免 D8/R8 生成合成类导致的 NoSuchMethodError
+                long currentVersionCode;
+                try {
+                    if (android.os.Build.VERSION.SDK_INT >= 28) { // API 28 = Android P
+                        // 使用反射调用 getLongVersionCode()
+                        java.lang.reflect.Method method = packageInfo.getClass().getMethod("getLongVersionCode");
+                        currentVersionCode = (Long) method.invoke(packageInfo);
+                    } else {
+                        currentVersionCode = packageInfo.versionCode;
+                    }
+                } catch (Exception e) {
+                    // 反射失败，使用旧方法
+                    currentVersionCode = packageInfo.versionCode;
+                }
+                
+                String currentVersionName = packageInfo.versionName;
+                
+                // 获取补丁应用时的 APK 版本
+                long savedVersionCode = prefs.getLong("apk_version_code", -1);
+                String savedVersionName = prefs.getString("apk_version_name", null);
+                
+                // 如果是第一次运行（没有保存版本信息），保存当前版本
+                if (savedVersionCode == -1) {
+                    logD("First run, saving APK version: " + currentVersionCode + " (" + currentVersionName + ")");
+                    prefs.edit()
+                        .putLong("apk_version_code", currentVersionCode)
+                        .putString("apk_version_name", currentVersionName)
+                        .apply();
+                } else {
+                    // 检查版本是否变化
+                    boolean versionChanged = (currentVersionCode != savedVersionCode) ||
+                        (currentVersionName != null && !currentVersionName.equals(savedVersionName));
+                    
+                    if (versionChanged) {
+                        logI("⚠️ APK version changed: " + savedVersionCode + " (" + savedVersionName + ") -> " + 
+                             currentVersionCode + " (" + currentVersionName + ")");
+                        logI("Clearing old patch due to APK update");
+                        
+                        // 获取已应用的补丁文件
+                        java.io.File updateDir = new java.io.File(context.getFilesDir(), "update");
+                        java.io.File appliedDir = new java.io.File(updateDir, "applied");
+                        java.io.File appliedFile = new java.io.File(appliedDir, "current_patch.zip");
+                        
+                        // 清除旧补丁
+                        clearPatchCompletely(prefs, appliedFile, appliedPatchId);
+                        
+                        // 更新保存的版本信息
+                        prefs.edit()
+                            .putLong("apk_version_code", currentVersionCode)
+                            .putString("apk_version_name", currentVersionName)
+                            .apply();
+                        
+                        logI("✅ Old patch cleared, ready for new APK version");
+                        return;
+                    }
+                }
+            } catch (Exception e) {
+                logE("Failed to check APK version", e);
+                // 继续加载补丁，不因版本检查失败而中断
+            }
 
             // 获取已应用的补丁文件
             java.io.File updateDir = new java.io.File(context.getFilesDir(), "update");
@@ -1920,8 +1986,42 @@ public class HotUpdateHelper {
                 // 记录补丁是否有签名（用于启动时验证）
                 boolean hasSignature = checkHasSignature(actualPatchFile);
                 android.content.SharedPreferences prefs = context.getSharedPreferences("patch_storage_prefs", Context.MODE_PRIVATE);
+                
+                // 保存补丁签名状态
                 prefs.edit().putBoolean("patch_had_signature", hasSignature).apply();
                 logD("✓ 记录补丁签名状态: " + (hasSignature ? "有签名" : "无签名"));
+                
+                // 保存当前 APK 版本信息（用于检测覆盖安装）
+                try {
+                    android.content.pm.PackageInfo packageInfo = context.getPackageManager()
+                        .getPackageInfo(context.getPackageName(), 0);
+                    
+                    // 使用反射避免 D8/R8 生成合成类导致的 NoSuchMethodError
+                    long versionCode;
+                    try {
+                        if (android.os.Build.VERSION.SDK_INT >= 28) { // API 28 = Android P
+                            // 使用反射调用 getLongVersionCode()
+                            java.lang.reflect.Method method = packageInfo.getClass().getMethod("getLongVersionCode");
+                            versionCode = (Long) method.invoke(packageInfo);
+                        } else {
+                            versionCode = packageInfo.versionCode;
+                        }
+                    } catch (Exception e) {
+                        // 反射失败，使用旧方法
+                        versionCode = packageInfo.versionCode;
+                    }
+                    
+                    String versionName = packageInfo.versionName;
+                    
+                    prefs.edit()
+                        .putLong("apk_version_code", versionCode)
+                        .putString("apk_version_name", versionName)
+                        .apply();
+                    
+                    logD("✓ 记录 APK 版本: " + versionCode + " (" + versionName + ")");
+                } catch (Exception e) {
+                    logE("Failed to save APK version", e);
+                }
                 
                 if (hasResources && callback != null) {
                     callback.onProgress(80, "资源合并完成");

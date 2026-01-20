@@ -18,6 +18,7 @@
 - 🔒 **安全可靠** - 支持签名验证和加密，防止篡改
 - 🎯 **兼容性好** - 支持 Android 5.0+ (API 21+)
 - ⚡ **自动降级** - Native 不可用时自动使用 Java 引擎
+- 🔄 **版本检测** - 🆕 自动检测 APK 版本变化，覆盖安装时清除旧补丁
 - 🌐 **管理后台** - 🆕 Web 管理后台，支持灰度发布、统计分析
 
 
@@ -25,6 +26,7 @@
 
 - **[快速开始](#-快速开始)** - 5 分钟上手
 - **[单例模式使用](docs/SINGLETON_PATTERN.md)** - 🆕 优雅的单例模式 API
+- **[版本检测和自动清除](docs/VERSION_CHECK.md)** - 🆕 APK 版本检测，覆盖安装自动清除补丁
 - **[安全机制](#-安全机制)** - 签名验证和加密保护
 - **[架构说明](docs/ARCHITECTURE.md)** - 核心算法统一性说明
 - **[Demo 下载](https://github.com/706412584/Android_hotupdate/releases/tag/demo)** - 下载体验 APK
@@ -47,10 +49,10 @@
 ```groovy
 dependencies {
     // 热更新核心库
-    implementation 'io.github.706412584:update:1.3.7'
+    implementation 'io.github.706412584:update:1.3.8'
     
     // 如果需要在设备上生成补丁（可选，但不推荐，推荐直接使用官方demo的apk）：
-    implementation 'io.github.706412584:patch-generator-android:1.3.7'
+    implementation 'io.github.706412584:patch-generator-android:1.3.8'
     
 }
 ```
@@ -59,11 +61,11 @@ dependencies {
 
 | 组件 | Maven 坐标 | 说明 |
 |------|-----------|------|
-| **update** | `io.github.706412584:update:1.3.7` | 热更新核心库，必需 |
-| **patch-generator-android** | `io.github.706412584:patch-generator-android:1.3.7` | 设备端补丁生成 |
-| **patch-native** | `io.github.706412584:patch-native:1.3.7` | Native 高性能引擎（AAR） |
-| **patch-core** | `io.github.706412584:patch-core:1.3.7` | 核心补丁引擎 |
-| **patch-cli** | [下载 JAR](https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.3.7/patch-cli-1.3.7-all.jar) | 命令行工具（独立运行） |
+| **update** | `io.github.706412584:update:1.3.8` | 热更新核心库，必需 |
+| **patch-generator-android** | `io.github.706412584:patch-generator-android:1.3.8` | 设备端补丁生成 |
+| **patch-native** | `io.github.706412584:patch-native:1.3.8` | Native 高性能引擎（AAR） |
+| **patch-core** | `io.github.706412584:patch-core:1.3.8` | 核心补丁引擎 |
+| **patch-cli** | [下载 JAR](https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.3.8/patch-cli-1.3.8-all.jar) | 命令行工具（独立运行） |
 
 > 💡 **提示**：
 > - `update` 库已包含基本功能，大多数情况下只需要这一个依赖
@@ -76,10 +78,10 @@ dependencies {
 
 ```bash
 # 下载 patch-cli
-wget https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.3.7/patch-cli-1.3.7-all.jar
+wget https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.3.8/patch-cli-1.3.8-all.jar
 
 # 生成带签名的补丁
-java -jar patch-cli-1.3.7-all.jar \
+java -jar patch-cli-1.3.8-all.jar \
   --base app-v1.0.apk \
   --new app-v1.1.apk \
   --output patch.zip \
