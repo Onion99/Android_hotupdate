@@ -301,7 +301,18 @@ public class AndroidPatchGenerator {
             try {
                 java.util.zip.ZipEntry entry;
                 while ((entry = zis.getNextEntry()) != null) {
+                    // 创建新条目，保留原始压缩模式
                     java.util.zip.ZipEntry newEntry = new java.util.zip.ZipEntry(entry.getName());
+                    
+                    // ⚠️ 关键：保留原始压缩方法（特别是 resources.arsc 的 STORED 模式）
+                    newEntry.setMethod(entry.getMethod());
+                    if (entry.getMethod() == java.util.zip.ZipEntry.STORED) {
+                        // STORED 模式需要设置大小和 CRC
+                        newEntry.setSize(entry.getSize());
+                        newEntry.setCompressedSize(entry.getCompressedSize());
+                        newEntry.setCrc(entry.getCrc());
+                    }
+                    
                     zos.putNextEntry(newEntry);
                     
                     if ("patch.json".equals(entry.getName())) {

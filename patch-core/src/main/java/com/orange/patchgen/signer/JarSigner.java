@@ -216,9 +216,48 @@ public class JarSigner {
                 System.out.println("[JarSigner] ✓ ZipSigner.signZip() 调用成功");
                 
                 if (tempOutput.exists()) {
+                    System.out.println("[JarSigner] ZipSigner 签名完成，临时文件: " + tempOutput.getAbsolutePath());
+                    System.out.println("[JarSigner] 临时文件大小: " + tempOutput.length() + " bytes");
+                    
+                    // ⚠️ 关键修复：ZipSigner 会压缩 resources.arsc，需要重新处理
+                    System.out.println("[JarSigner] 检查并修复 resources.arsc 压缩问题...");
+                    boolean fixed = fixResourcesArscCompression(tempOutput);
+                    if (fixed) {
+                        System.out.println("[JarSigner] ✓ resources.arsc 已修复为 STORE 模式");
+                        System.out.println("[JarSigner] 修复后临时文件大小: " + tempOutput.length() + " bytes");
+                    } else {
+                        System.out.println("[JarSigner] ⚠️ resources.arsc 修复失败或不需要修复");
+                    }
+                    
                     // 替换原文件
-                    jarFile.delete();
-                    tempOutput.renameTo(jarFile);
+                    System.out.println("[JarSigner] 准备替换原文件");
+                    System.out.println("[JarSigner] 原文件: " + jarFile.getAbsolutePath());
+                    if (jarFile.exists()) {
+                        System.out.println("[JarSigner] 原文件大小: " + jarFile.length() + " bytes");
+                        boolean deleted = jarFile.delete();
+                        System.out.println("[JarSigner] 删除原文件: " + deleted);
+                        if (!deleted) {
+                            System.err.println("[JarSigner] ✗ 无法删除原文件");
+                            tempOutput.delete();
+                            return false;
+                        }
+                    }
+                    
+                    boolean renamed = tempOutput.renameTo(jarFile);
+                    System.out.println("[JarSigner] 重命名临时文件: " + renamed);
+                    
+                    if (!renamed) {
+                        System.err.println("[JarSigner] ✗ 无法重命名临时文件");
+                        return false;
+                    }
+                    
+                    if (jarFile.exists()) {
+                        System.out.println("[JarSigner] ✓ 最终文件大小: " + jarFile.length() + " bytes");
+                    } else {
+                        System.err.println("[JarSigner] ✗ 最终文件不存在！");
+                        return false;
+                    }
+                    
                     System.out.println("[JarSigner] ✓ ZipSigner 签名成功");
                     return true;
                 } else {
@@ -850,6 +889,9 @@ public class JarSigner {
         File tempFile = new File(jarFile.getParentFile(), jarFile.getName() + ".tmp");
         
         try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(tempFile))) {
+            // 设置默认压缩级别（DEFLATED 模式）
+            zos.setLevel(java.util.zip.Deflater.DEFAULT_COMPRESSION);
+            
             // 1. 写入 MANIFEST.MF
             zos.putNextEntry(new ZipEntry(MANIFEST_NAME));
             manifest.write(zos);
@@ -876,10 +918,14 @@ public class JarSigner {
                 
                 // resources.arsc 必须使用 STORE 模式（不压缩）
                 if ("resources.arsc".equals(name)) {
+                    System.out.println("[JarSigner] 处理 resources.arsc");
+                    System.out.println("  原始大小: " + data.length + " bytes (" + (data.length / 1024) + " KB)");
                     zipEntry.setMethod(ZipEntry.STORED);
                     zipEntry.setSize(data.length);
                     zipEntry.setCompressedSize(data.length);
                     zipEntry.setCrc(calculateCrc32(data));
+                    System.out.println("  压缩方式: STORED (不压缩)");
+                    System.out.println("  CRC32: " + Long.toHexString(zipEntry.getCrc()));
                 }
                 
                 zos.putNextEntry(zipEntry);
@@ -904,6 +950,104 @@ public class JarSigner {
         java.util.zip.CRC32 crc = new java.util.zip.CRC32();
         crc.update(data);
         return crc.getValue();
+    }
+    
+    /**
+     * 修复 resources.arsc 的压缩问题
+     * ZipSigner 会压缩所有文件，包括 resources.arsc
+     * 这个方法会重新打包 ZIP，将 resources.arsc 改为 STORE 模式
+     */
+    private boolean fixResourcesArscCompression(File zipFile) {
+        try {
+            System.out.println("[JarSigner] 开始修复 resources.arsc 压缩问题");
+            System.out.println("[JarSigner] 原始文件: " + zipFile.getAbsolutePath());
+            System.out.println("[JarSigner] 原始文件大小: " + zipFile.length() + " bytes");
+            
+            // 1. 读取所有条目
+            Map<String, byte[]> entries = new LinkedHashMap<>();
+            try (java.util.zip.ZipInputStream zis = new java.util.zip.ZipInputStream(new FileInputStream(zipFile))) {
+                java.util.zip.ZipEntry entry;
+                while ((entry = zis.getNextEntry()) != null) {
+                    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                    byte[] buffer = new byte[8192];
+                    int bytesRead;
+                    while ((bytesRead = zis.read(buffer)) != -1) {
+                        baos.write(buffer, 0, bytesRead);
+                    }
+                    entries.put(entry.getName(), baos.toByteArray());
+                    System.out.println("[JarSigner] 读取条目: " + entry.getName() + " (" + baos.size() + " bytes)");
+                }
+            }
+            
+            System.out.println("[JarSigner] 共读取 " + entries.size() + " 个条目");
+            
+            // 2. 检查是否有 resources.arsc
+            if (!entries.containsKey("resources.arsc")) {
+                System.out.println("[JarSigner] 补丁中没有 resources.arsc，跳过修复");
+                return false;
+            }
+            
+            byte[] resourcesArscData = entries.get("resources.arsc");
+            System.out.println("[JarSigner] 发现 resources.arsc，大小: " + resourcesArscData.length + " bytes");
+            
+            // 3. 重新打包，resources.arsc 使用 STORE 模式
+            File tempFile = new File(zipFile.getParentFile(), zipFile.getName() + ".fixed.tmp");
+            System.out.println("[JarSigner] 创建临时文件: " + tempFile.getAbsolutePath());
+            
+            try (ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(tempFile))) {
+                zos.setLevel(java.util.zip.Deflater.DEFAULT_COMPRESSION);
+                
+                for (Map.Entry<String, byte[]> entry : entries.entrySet()) {
+                    String name = entry.getKey();
+                    byte[] data = entry.getValue();
+                    
+                    ZipEntry zipEntry = new ZipEntry(name);
+                    
+                    // resources.arsc 必须使用 STORE 模式（不压缩）
+                    if ("resources.arsc".equals(name)) {
+                        System.out.println("[JarSigner] 修复 resources.arsc 压缩模式");
+                        System.out.println("  原始大小: " + data.length + " bytes (" + (data.length / 1024) + " KB)");
+                        zipEntry.setMethod(ZipEntry.STORED);
+                        zipEntry.setSize(data.length);
+                        zipEntry.setCompressedSize(data.length);
+                        zipEntry.setCrc(calculateCrc32(data));
+                        System.out.println("  压缩方式: STORED (不压缩)");
+                        System.out.println("  CRC32: " + Long.toHexString(zipEntry.getCrc()));
+                    }
+                    
+                    zos.putNextEntry(zipEntry);
+                    zos.write(data);
+                    zos.closeEntry();
+                }
+            }
+            
+            System.out.println("[JarSigner] 临时文件创建完成，大小: " + tempFile.length() + " bytes");
+            
+            // 4. 替换原文件
+            if (!zipFile.delete()) {
+                System.err.println("[JarSigner] 无法删除原文件: " + zipFile.getAbsolutePath());
+                tempFile.delete();
+                return false;
+            }
+            System.out.println("[JarSigner] 原文件已删除");
+            
+            if (!tempFile.renameTo(zipFile)) {
+                System.err.println("[JarSigner] 无法重命名临时文件");
+                System.err.println("[JarSigner] 临时文件: " + tempFile.getAbsolutePath());
+                System.err.println("[JarSigner] 目标文件: " + zipFile.getAbsolutePath());
+                return false;
+            }
+            System.out.println("[JarSigner] 临时文件已重命名为原文件");
+            System.out.println("[JarSigner] 修复后文件大小: " + zipFile.length() + " bytes");
+            
+            System.out.println("[JarSigner] ✓ resources.arsc 压缩问题已修复");
+            return true;
+            
+        } catch (Exception e) {
+            System.err.println("[JarSigner] 修复 resources.arsc 失败: " + e.getMessage());
+            e.printStackTrace();
+            return false;
+        }
     }
     
     /**

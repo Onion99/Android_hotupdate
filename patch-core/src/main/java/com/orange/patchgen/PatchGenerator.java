@@ -166,9 +166,20 @@ public class PatchGenerator {
             if (resDiff != null && resDiff.hasChanges()) {
                 File newResourcesArsc = new File(newExtractDir, "resources.arsc");
                 if (newResourcesArsc.exists()) {
+                    System.out.println("[PatchGenerator] 复制 resources.arsc");
+                    System.out.println("  源文件: " + newResourcesArsc.getAbsolutePath());
+                    System.out.println("  源文件大小: " + newResourcesArsc.length() + " bytes (" + (newResourcesArsc.length() / 1024) + " KB)");
+                    
                     resourcesArsc = new File(tempDir, "resources.arsc");
                     FileUtils.copyFile(newResourcesArsc, resourcesArsc);
+                    
+                    System.out.println("  目标文件: " + resourcesArsc.getAbsolutePath());
+                    System.out.println("  目标文件大小: " + resourcesArsc.length() + " bytes (" + (resourcesArsc.length() / 1024) + " KB)");
+                } else {
+                    System.out.println("[PatchGenerator] ⚠️ resources.arsc 不存在: " + newResourcesArsc.getAbsolutePath());
                 }
+            } else {
+                System.out.println("[PatchGenerator] ⚠️ 没有资源变化，跳过 resources.arsc");
             }
             
             // 5. 创建 PatchInfo
