@@ -59,22 +59,6 @@ dependencies {
     
     // patch-core for JKSHelper
     implementation project(':patch-core')
-    
-    // Unit testing
-    testImplementation 'junit:junit:4.13.2'
-    
-    // Property-based testing with jqwik
-    testImplementation 'net.jqwik:jqwik:1.8.2'
-    
-    // Fluent assertions
-    testImplementation 'org.assertj:assertj-core:3.24.2'
-    
-    // Mocking framework
-    testImplementation 'org.mockito:mockito-core:5.8.0'
-    
-    // Android instrumented tests
-    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
-    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
 }
 
 // 应用 Maven Central 发布配置
