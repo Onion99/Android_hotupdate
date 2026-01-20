@@ -245,6 +245,14 @@ function initDatabase() {
         missingColumns.push({ name: 'force_update_message', sql: `ALTER TABLE apps ADD COLUMN force_update_message TEXT` });
       }
       
+      // 加密相关字段
+      if (!columnNames.includes('encryption_enabled')) {
+        missingColumns.push({ name: 'encryption_enabled', sql: `ALTER TABLE apps ADD COLUMN encryption_enabled BOOLEAN DEFAULT 0` });
+      }
+      if (!columnNames.includes('encryption_key')) {
+        missingColumns.push({ name: 'encryption_key', sql: `ALTER TABLE apps ADD COLUMN encryption_key VARCHAR(64)` });
+      }
+      
       if (missingColumns.length > 0) {
         console.log('🔄 迁移数据库：添加缺失字段...');
         missingColumns.forEach(col => {

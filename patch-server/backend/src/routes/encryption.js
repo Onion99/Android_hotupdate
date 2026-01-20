@@ -4,8 +4,8 @@ const db = require('../models/database');
 const { authenticateToken, requireAdmin } = require('../middleware/auth');
 const { generateKey, validateKey, encryptText, decryptText } = require('../utils/encryption');
 
-// 生成新的加密密钥
-router.get('/generate-key', authenticateToken, requireAdmin, async (req, res) => {
+// 生成新的加密密钥（所有登录用户都可以使用）
+router.get('/generate-key', authenticateToken, async (req, res) => {
   try {
     const key = generateKey();
     res.json({ key });
@@ -26,7 +26,7 @@ router.get('/config/:appId', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: '应用不存在' });
     }
     
-    if (app.user_id !== req.user.id && req.user.role !== 'admin') {
+    if (app.owner_id !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({ error: '无权访问' });
     }
     
@@ -58,7 +58,7 @@ router.put('/config/:appId', authenticateToken, async (req, res) => {
       return res.status(404).json({ error: '应用不存在' });
     }
     
-    if (app.user_id !== req.user.id && req.user.role !== 'admin') {
+    if (app.owner_id !== req.user.id && req.user.role !== 'admin') {
       return res.status(403).json({ error: '无权访问' });
     }
     
@@ -109,8 +109,8 @@ router.post('/validate-key', authenticateToken, (req, res) => {
   }
 });
 
-// 测试加密/解密
-router.post('/test', authenticateToken, requireAdmin, (req, res) => {
+// 测试加密/解密（所有登录用户都可以使用）
+router.post('/test', authenticateToken, (req, res) => {
   try {
     const { key, text } = req.body;
     
