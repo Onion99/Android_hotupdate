@@ -559,27 +559,36 @@ public class HotUpdateHelper {
             }
 
             String patchPath = actualPatchFile.getAbsolutePath();
+            String resourcePath = patchPath; // 资源路径可能不同于 DEX 路径
 
             // 检查补丁是否包含资源
             if (hasResourcePatchInternal(actualPatchFile)) {
-                logD("Patch contains resources, merging with original APK");
+                logD("Patch contains resources, checking for merged resources");
 
-                // 使用 ResourceMerger 合并资源（Tinker 的方式）
+                // 检查是否已经有合并后的资源文件
                 java.io.File mergedResourceFile = new java.io.File(appliedDir, "merged_resources.apk");
 
-                boolean merged = ResourceMerger.mergeResources(
-                    context, actualPatchFile, mergedResourceFile);
-
-                if (merged && mergedResourceFile.exists()) {
-                    logI("Resources merged successfully, size: " + mergedResourceFile.length());
-                    // 使用合并后的完整资源包
-                    patchPath = mergedResourceFile.getAbsolutePath();
+                if (mergedResourceFile.exists()) {
+                    logI("Using existing merged resources: " + mergedResourceFile.length());
+                    resourcePath = mergedResourceFile.getAbsolutePath();
                 } else {
-                    logW("Failed to merge resources, using patch directly");
+                    logD("Merged resources not found, merging now...");
+                    
+                    // 使用 ResourceMerger 合并资源（Tinker 的方式）
+                    boolean merged = ResourceMerger.mergeResources(
+                        context, actualPatchFile, mergedResourceFile);
+
+                    if (merged && mergedResourceFile.exists()) {
+                        logI("Resources merged successfully, size: " + mergedResourceFile.length());
+                        // 使用合并后的完整资源包
+                        resourcePath = mergedResourceFile.getAbsolutePath();
+                    } else {
+                        logW("Failed to merge resources, using patch directly");
+                    }
                 }
             }
 
-            // 注入 DEX 补丁
+            // 注入 DEX 补丁（使用原始补丁文件）
             if (!DexPatcher.isPatchInjected(context, patchPath)) {
                 DexPatcher.injectPatchDex(context, patchPath);
                 logD("Dex patch loaded successfully");
@@ -587,8 +596,8 @@ public class HotUpdateHelper {
 
             // 加载资源补丁（使用合并后的完整资源包）
             try {
-                ResourcePatcher.loadPatchResources(context, patchPath);
-                logD("Resource patch loaded successfully");
+                ResourcePatcher.loadPatchResources(context, resourcePath);
+                logD("Resource patch loaded successfully from: " + resourcePath);
             } catch (ResourcePatcher.PatchResourceException e) {
                 logW("Failed to load resource patch");
             }

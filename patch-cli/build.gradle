@@ -7,6 +7,9 @@ plugins {
 // 应用通用的 Maven 发布配置
 apply from: "${rootProject.projectDir}/maven-publish.gradle"
 
+// 设置项目版本（从 maven-publish.gradle 读取）
+version = pomVersion
+
 java {
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11

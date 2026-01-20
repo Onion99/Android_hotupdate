@@ -43,7 +43,7 @@ COPY patch-server/backend/ ./
 RUN mkdir -p tools
 
 # 下载 patch-cli 工具
-RUN wget -O ./tools/patch-cli.jar https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.3.3/patch-cli-1.3.3-all.jar
+RUN wget -O ./tools/patch-cli.jar https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.3.6/patch-cli-1.3.6-all.jar
 
 # 从前端构建阶段复制构建产物
 COPY --from=frontend-builder /app/frontend/dist ./public
