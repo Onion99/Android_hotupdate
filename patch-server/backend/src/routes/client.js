@@ -62,11 +62,21 @@ router.get('/check-update', async (req, res) => {
 
     // 如果提供了 appId，只查找该应用的补丁
     if (appId && appConfig) {
-      query += ` AND p.app_id = (SELECT id FROM apps WHERE app_id = ?)`;
+      // 使用 JOIN 来关联 apps 表
+      query = `
+        SELECT p.* FROM patches p
+        INNER JOIN apps a ON p.app_id = a.id
+        WHERE p.status = 'active'
+          AND p.base_version = ?
+          AND a.app_id = ?
+      `;
       params.push(appId);
     }
 
     query += ` ORDER BY p.created_at DESC LIMIT 1`;
+    
+    console.log('查询补丁 SQL:', query);
+    console.log('查询参数:', params);
 
     const patch = await db.get(query, params);
 
