@@ -52,6 +52,13 @@ router.get('/check-update', async (req, res) => {
     // 确定当前版本（优先使用补丁版本，否则使用应用版本）
     const currentVersion = currentPatchVersion || version;
 
+    console.log('🔍 检查更新请求参数:');
+    console.log('  - version:', version);
+    console.log('  - currentPatchVersion:', currentPatchVersion);
+    console.log('  - currentVersion:', currentVersion);
+    console.log('  - appId:', appId);
+    console.log('  - deviceId:', deviceId);
+
     // 查找最新的可用补丁
     let query = `
       SELECT p.* FROM patches p
@@ -71,14 +78,29 @@ router.get('/check-update', async (req, res) => {
           AND a.app_id = ?
       `;
       params.push(appId);
+      
+      console.log('📋 应用配置信息:');
+      console.log('  - require_signature:', appConfig.require_signature);
+      console.log('  - require_encryption:', appConfig.require_encryption);
     }
 
     query += ` ORDER BY p.created_at DESC LIMIT 1`;
     
-    console.log('查询补丁 SQL:', query);
-    console.log('查询参数:', params);
+    console.log('🔎 查询补丁 SQL:', query);
+    console.log('📝 查询参数:', params);
 
     const patch = await db.get(query, params);
+    
+    console.log('📦 查询结果:', patch ? `找到补丁 ID: ${patch.id}, patch_id: ${patch.patch_id}` : '未找到补丁');
+    
+    // 额外调试：查看所有可用补丁
+    const allPatches = await db.query(`
+      SELECT p.id, p.patch_id, p.version, p.base_version, p.status, a.app_id, a.app_name
+      FROM patches p
+      INNER JOIN apps a ON p.app_id = a.id
+      WHERE p.status = 'active'
+    `);
+    console.log('📊 数据库中所有活跃补丁:', JSON.stringify(allPatches, null, 2));
 
     if (!patch) {
       return res.json({
@@ -320,6 +342,47 @@ router.get('/current-patch', async (req, res) => {
   } catch (error) {
     console.error('获取当前补丁信息失败:', error);
     res.status(500).json({ error: '获取当前补丁信息失败' });
+  }
+});
+
+// 调试端点：查看所有补丁和应用信息
+router.get('/debug/patches', async (req, res) => {
+  try {
+    const patches = await db.query(`
+      SELECT 
+        p.id as patch_db_id,
+        p.patch_id,
+        p.version,
+        p.base_version,
+        p.status,
+        p.app_id as patch_app_id,
+        a.id as app_db_id,
+        a.app_id,
+        a.app_name,
+        a.status as app_status
+      FROM patches p
+      LEFT JOIN apps a ON p.app_id = a.id
+      ORDER BY p.created_at DESC
+    `);
+    
+    const apps = await db.query(`
+      SELECT id, app_id, app_name, status
+      FROM apps
+    `);
+    
+    res.json({
+      patches,
+      apps,
+      summary: {
+        totalPatches: patches.length,
+        activePatches: patches.filter(p => p.status === 'active').length,
+        totalApps: apps.length,
+        activeApps: apps.filter(a => a.app_status === 'active').length
+      }
+    });
+  } catch (error) {
+    console.error('调试查询失败:', error);
+    res.status(500).json({ error: '调试查询失败', details: error.message });
   }
 });
 
