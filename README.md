@@ -630,7 +630,7 @@ curl -X POST https://your-server.com/api/apps \
 ### 运行环境
 - 最低版本：Android 5.0 (API 21)
 - 推荐版本：Android 7.0+ (API 24+)
-- 目标版本：Android 14 (API 34)
+- 目标版本：Android 16 (API 36)
 
 ## 🔧 编译
 
