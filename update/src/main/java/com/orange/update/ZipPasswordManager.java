@@ -103,6 +103,55 @@ public class ZipPasswordManager {
     }
     
     /**
+     * 测试 ZIP 密码是否正确（不实际解压）
+     * 
+     * @param zipFile ZIP 文件
+     * @param password 密码
+     * @return 密码是否正确
+     */
+    public boolean testPassword(File zipFile, String password) {
+        try {
+            ZipFile zip = new ZipFile(zipFile, password.toCharArray());
+            
+            if (!zip.isValidZipFile()) {
+                Log.w(TAG, "Invalid ZIP file");
+                return false;
+            }
+            
+            if (!zip.isEncrypted()) {
+                Log.d(TAG, "ZIP is not encrypted");
+                return true; // 未加密的 ZIP，密码验证通过
+            }
+            
+            // 尝试读取第一个文件来验证密码
+            if (zip.getFileHeaders().isEmpty()) {
+                Log.w(TAG, "ZIP is empty");
+                return true;
+            }
+            
+            // 尝试读取第一个文件的前几个字节（不实际写入磁盘）
+            java.io.InputStream is = zip.getInputStream(zip.getFileHeaders().get(0));
+            byte[] buffer = new byte[1024];
+            int bytesRead = is.read(buffer);
+            is.close();
+            
+            Log.d(TAG, "✓ ZIP password test successful (read " + bytesRead + " bytes)");
+            return true;
+            
+        } catch (ZipException e) {
+            if (e.getMessage() != null && e.getMessage().contains("Wrong Password")) {
+                Log.d(TAG, "ZIP password test failed: wrong password");
+                return false;
+            }
+            Log.w(TAG, "ZIP password test failed: " + e.getMessage());
+            return false;
+        } catch (Exception e) {
+            Log.w(TAG, "ZIP password test failed: " + e.getMessage());
+            return false;
+        }
+    }
+    
+    /**
      * 验证 ZIP 密码是否正确
      * 
      * @param zipFile ZIP 文件

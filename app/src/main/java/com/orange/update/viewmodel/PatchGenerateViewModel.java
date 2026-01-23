@@ -252,15 +252,15 @@ public class PatchGenerateViewModel extends ViewModel {
                     generationStatus.postValue("正在加密补丁...");
                     
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                        com.orange.update.SecurityManager securityManager = 
-                            new com.orange.update.SecurityManager(context);
+                        com.orange.patchgen.android.PatchEncryptor patchEncryptor = 
+                            new com.orange.patchgen.android.PatchEncryptor(context);
                         
                         File encryptedFile;
                         File previousFile = currentFile;
                         
                         if (aesPassword != null && !aesPassword.isEmpty()) {
                             android.util.Log.d("PatchGenerateVM", "使用自定义密码加密补丁");
-                            encryptedFile = securityManager.encryptPatchWithPassword(currentFile, aesPassword);
+                            encryptedFile = patchEncryptor.encryptPatchWithPassword(currentFile, aesPassword);
                             
                             // 保存密码提示信息
                             File passwordFile = new File(encryptedFile.getPath() + ".pwd");
@@ -271,7 +271,7 @@ public class PatchGenerateViewModel extends ViewModel {
                             fos.close();
                         } else {
                             android.util.Log.d("PatchGenerateVM", "使用默认密钥加密补丁");
-                            encryptedFile = securityManager.encryptPatch(currentFile);
+                            encryptedFile = patchEncryptor.encryptPatch(currentFile);
                         }
                         
                         // 删除上一步的文件

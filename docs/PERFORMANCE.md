@@ -23,7 +23,7 @@
 
 ### 1. 使用 Native 引擎
 
-**优化前**:
+**优化�?*:
 ```java
 PatchGenerator generator = new PatchGenerator.Builder()
     .baseApk(baseApk)
@@ -32,22 +32,22 @@ PatchGenerator generator = new PatchGenerator.Builder()
     .build();
 ```
 
-**优化后**:
+**优化�?*:
 ```java
 PatchGenerator generator = new PatchGenerator.Builder()
     .baseApk(baseApk)
     .newApk(newApk)
-    .engineType(EngineType.AUTO)  // 自动选择，优先 Native
+    .engineType(EngineType.AUTO)  // 自动选择，优�?Native
     .build();
 ```
 
-**性能提升**: 2-3倍
+**性能提升**: 2-3�?
 
 ---
 
 ### 2. 并行处理多个 DEX
 
-**优化前**:
+**优化�?*:
 ```java
 // 串行处理
 for (File dexFile : dexFiles) {
@@ -56,7 +56,7 @@ for (File dexFile : dexFiles) {
 }
 ```
 
-**优化后**:
+**优化�?*:
 ```java
 // 并行处理
 ExecutorService executor = Executors.newFixedThreadPool(
@@ -75,22 +75,22 @@ for (Future<DexDiffResult> future : futures) {
 }
 ```
 
-**性能提升**: 根据 CPU 核心数，2-4倍
+**性能提升**: 根据 CPU 核心数，2-4�?
 
 ---
 
-### 3. 流式处理大文件
+### 3. 流式处理大文�?
 
-**优化前**:
+**优化�?*:
 ```java
 // 一次性读取整个文件到内存
 byte[] data = Files.readAllBytes(file.toPath());
 processData(data);
 ```
 
-**优化后**:
+**优化�?*:
 ```java
-// 流式处理，避免 OOM
+// 流式处理，避�?OOM
 try (InputStream is = new FileInputStream(file);
      BufferedInputStream bis = new BufferedInputStream(is, 8192)) {
     
@@ -108,13 +108,13 @@ try (InputStream is = new FileInputStream(file);
 
 ### 4. 缓存中间结果
 
-**优化前**:
+**优化�?*:
 ```java
-// 每次都重新解析
+// 每次都重新解�?
 ApkInfo apkInfo = apkParser.parse(apkFile);
 ```
 
-**优化后**:
+**优化�?*:
 ```java
 // 缓存解析结果
 private final Map<String, ApkInfo> apkCache = new LruCache<>(10);
@@ -138,7 +138,7 @@ ApkInfo getApkInfo(File apkFile) {
 
 ### 5. 优化 ZIP 压缩
 
-**优化前**:
+**优化�?*:
 ```java
 // 使用默认压缩级别
 ZipParameters params = new ZipParameters();
@@ -146,19 +146,19 @@ params.setCompressionMethod(CompressionMethod.DEFLATE);
 params.setCompressionLevel(CompressionLevel.NORMAL);
 ```
 
-**优化后**:
+**优化�?*:
 ```java
 // 根据文件类型选择压缩策略
 ZipParameters params = new ZipParameters();
 
 if (fileName.endsWith(".dex") || fileName.endsWith(".so")) {
-    // DEX 和 SO 已经压缩过，使用 STORE
+    // DEX �?SO 已经压缩过，使用 STORE
     params.setCompressionMethod(CompressionMethod.STORE);
 } else if (fileName.equals("resources.arsc")) {
     // resources.arsc 必须 STORE
     params.setCompressionMethod(CompressionMethod.STORE);
 } else {
-    // 其他文件使用快速压缩
+    // 其他文件使用快速压�?
     params.setCompressionMethod(CompressionMethod.DEFLATE);
     params.setCompressionLevel(CompressionLevel.FASTEST);
 }
@@ -168,17 +168,17 @@ if (fileName.endsWith(".dex") || fileName.endsWith(".so")) {
 
 ---
 
-## ⚡ 补丁应用优化
+## �?补丁应用优化
 
 ### 1. 异步应用补丁
 
-**优化前**:
+**优化�?*:
 ```java
 // 主线程应用补丁（会卡顿）
 helper.applyPatch(patchFile, callback);
 ```
 
-**优化后**:
+**优化�?*:
 ```java
 // 后台线程应用补丁
 new Thread(() -> {
@@ -193,15 +193,15 @@ new Thread(() -> {
 }).start();
 ```
 
-**用户体验**: 无卡顿
+**用户体验**: 无卡�?
 
 ---
 
-### 2. 延迟加载非关键资源
+### 2. 延迟加载非关键资�?
 
-**优化前**:
+**优化�?*:
 ```java
-// 启动时加载所有资源
+// 启动时加载所有资�?
 @Override
 protected void attachBaseContext(Context base) {
     super.attachBaseContext(base);
@@ -209,14 +209,14 @@ protected void attachBaseContext(Context base) {
 }
 ```
 
-**优化后**:
+**优化�?*:
 ```java
 // 启动时只加载关键资源
 @Override
 protected void attachBaseContext(Context base) {
     super.attachBaseContext(base);
     
-    // 只加载 DEX 和 SO（立即生效）
+    // 只加�?DEX �?SO（立即生效）
     HotUpdateHelper.getInstance().loadDexAndSo();
 }
 
@@ -224,7 +224,7 @@ protected void attachBaseContext(Context base) {
 public void onCreate() {
     super.onCreate();
     
-    // 延迟加载资源（需要重启才生效）
+    // 延迟加载资源（需要重启才生效�?
     new Handler().postDelayed(() -> {
         HotUpdateHelper.getInstance().loadResources();
     }, 1000);
@@ -235,41 +235,41 @@ public void onCreate() {
 
 ---
 
-### 3. 预验证补丁
+### 3. 预验证补�?
 
-**优化前**:
+**优化�?*:
 ```java
-// 应用时才验证（耗时）
+// 应用时才验证（耗时�?
 helper.applyPatch(patchFile, callback);
 ```
 
-**优化后**:
+**优化�?*:
 ```java
-// 下载后立即验证
+// 下载后立即验�?
 helper.validatePatch(patchFile, new ValidationCallback() {
     @Override
     public void onValid() {
-        // 验证通过，可以应用
+        // 验证通过，可以应�?
         helper.applyPatch(patchFile, callback);
     }
     
     @Override
     public void onInvalid(String reason) {
-        // 验证失败，删除文件
+        // 验证失败，删除文�?
         patchFile.delete();
     }
 });
 ```
 
-**用户体验**: 避免应用时失败
+**用户体验**: 避免应用时失�?
 
 ---
 
 ### 4. 缓存签名验证结果
 
-**优化前**:
+**优化�?*:
 ```java
-// 每次启动都验证签名
+// 每次启动都验证签�?
 @Override
 protected void attachBaseContext(Context base) {
     super.attachBaseContext(base);
@@ -283,7 +283,7 @@ protected void attachBaseContext(Context base) {
 }
 ```
 
-**优化后**:
+**优化�?*:
 ```java
 // 缓存验证结果
 private static final String PREF_SIGNATURE_CACHE = "signature_cache";
@@ -298,10 +298,10 @@ protected void attachBaseContext(Context base) {
         SharedPreferences prefs = getSharedPreferences(PREF_SIGNATURE_CACHE, MODE_PRIVATE);
         
         if (prefs.getBoolean(cacheKey, false)) {
-            // 缓存命中，跳过验证
+            // 缓存命中，跳过验�?
             loadPatch(patchFile);
         } else {
-            // 缓存未命中，验证并缓存
+            // 缓存未命中，验证并缓�?
             if (verifySignature(patchFile)) {
                 prefs.edit().putBoolean(cacheKey, true).apply();
                 loadPatch(patchFile);
@@ -319,16 +319,16 @@ protected void attachBaseContext(Context base) {
 
 ### 1. 及时释放资源
 
-**优化前**:
+**优化�?*:
 ```java
 public void applyPatch(File patchFile) {
     ZipFile zipFile = new ZipFile(patchFile);
     // ... 处理补丁
-    // 忘记关闭，导致内存泄漏
+    // 忘记关闭，导致内存泄�?
 }
 ```
 
-**优化后**:
+**优化�?*:
 ```java
 public void applyPatch(File patchFile) {
     try (ZipFile zipFile = new ZipFile(patchFile)) {
@@ -336,7 +336,7 @@ public void applyPatch(File patchFile) {
     } catch (IOException e) {
         // 处理异常
     }
-    // 自动关闭，释放资源
+    // 自动关闭，释放资�?
 }
 ```
 
@@ -344,17 +344,17 @@ public void applyPatch(File patchFile) {
 
 ---
 
-### 2. 使用弱引用缓存
+### 2. 使用弱引用缓�?
 
-**优化前**:
+**优化�?*:
 ```java
 // 强引用缓存，可能导致 OOM
 private final Map<String, Bitmap> imageCache = new HashMap<>();
 ```
 
-**优化后**:
+**优化�?*:
 ```java
-// 弱引用缓存，内存不足时自动回收
+// 弱引用缓存，内存不足时自动回�?
 private final Map<String, WeakReference<Bitmap>> imageCache = new HashMap<>();
 
 Bitmap getImage(String key) {
@@ -377,20 +377,20 @@ Bitmap getImage(String key) {
 
 ---
 
-### 3. 分批处理大数据
+### 3. 分批处理大数�?
 
-**优化前**:
+**优化�?*:
 ```java
-// 一次性处理所有数据
+// 一次性处理所有数�?
 List<File> allFiles = getAllFiles();
 for (File file : allFiles) {
     processFile(file);
 }
 ```
 
-**优化后**:
+**优化�?*:
 ```java
-// 分批处理，避免内存峰值
+// 分批处理，避免内存峰�?
 List<File> allFiles = getAllFiles();
 int batchSize = 10;
 
@@ -407,7 +407,7 @@ for (int i = 0; i < allFiles.size(); i += batchSize) {
 }
 ```
 
-**内存峰值**: 降低 80%+
+**内存峰�?*: 降低 80%+
 
 ---
 
@@ -415,13 +415,13 @@ for (int i = 0; i < allFiles.size(); i += batchSize) {
 
 ### 1. 只包含修改的文件
 
-**优化前**:
+**优化�?*:
 ```java
-// 包含所有文件
+// 包含所有文�?
 packer.addFile(allFiles);
 ```
 
-**优化后**:
+**优化�?*:
 ```java
 // 只包含修改的文件
 List<File> modifiedFiles = diffResult.getModifiedFiles();
@@ -434,13 +434,13 @@ packer.addFile(modifiedFiles);
 
 ### 2. 使用增量算法
 
-**优化前**:
+**优化�?*:
 ```java
-// 直接包含新文件
+// 直接包含新文�?
 packer.addFile(newDexFile);
 ```
 
-**优化后**:
+**优化�?*:
 ```java
 // 使用 BsDiff 生成差异文件
 File diffFile = bsDiff.diff(oldDexFile, newDexFile);
@@ -453,13 +453,13 @@ packer.addFile(diffFile);
 
 ### 3. 优化资源文件
 
-**优化前**:
+**优化�?*:
 ```java
-// 包含所有资源
+// 包含所有资�?
 packer.addDirectory(resDir);
 ```
 
-**优化后**:
+**优化�?*:
 ```java
 // 只包含修改的资源
 for (FileChange change : resDiff.getModifiedFiles()) {
@@ -479,7 +479,7 @@ for (FileChange change : resDiff.getModifiedFiles()) {
 
 ---
 
-## 🔍 监控和分析
+## 🔍 监控和分�?
 
 ### 1. 性能监控
 
@@ -585,7 +585,7 @@ public class PatchAnalyzer {
 
 ### 补丁应用性能
 
-| 补丁大小 | 优化前 | 优化后 | 提升 |
+| 补丁大小 | 优化�?| 优化�?| 提升 |
 |---------|--------|--------|------|
 | 1MB | 3s | 1s | 3.0x |
 | 5MB | 8s | 2.5s | 3.2x |
@@ -593,7 +593,7 @@ public class PatchAnalyzer {
 
 ### 启动加载性能
 
-| 操作 | 优化前 | 优化后 | 提升 |
+| 操作 | 优化�?| 优化�?| 提升 |
 |------|--------|--------|------|
 | 加载 DEX | 80ms | 30ms | 2.7x |
 | 加载资源 | 120ms | 40ms | 3.0x |
@@ -601,7 +601,7 @@ public class PatchAnalyzer {
 
 ---
 
-## 💡 最佳实践
+## 💡 最佳实�?
 
 ### 1. 生产环境配置
 
@@ -610,20 +610,20 @@ public class PatchAnalyzer {
 PatchGenerator generator = new PatchGenerator.Builder()
     .baseApk(baseApk)
     .newApk(newApk)
-    .engineType(EngineType.AUTO)           // 自动选择最优引擎
+    .engineType(EngineType.AUTO)           // 自动选择最优引�?
     .patchMode(PatchMode.FULL_DEX)         // 完整 DEX 模式
     .signingConfig(signingConfig)          // 启用签名
     .config(GeneratorConfig.builder()
         .tempDir(cacheDir)                 // 使用缓存目录
         .enableParallel(true)              // 启用并行处理
-        .threadPoolSize(4)                 // 4 个线程
+        .threadPoolSize(4)                 // 4 个线�?
         .build())
     .build();
 ```
 
 ---
 
-### 2. 开发环境配置
+### 2. 开发环境配�?
 
 ```java
 // 开发配置（快速迭代）
@@ -632,7 +632,7 @@ PatchGenerator generator = new PatchGenerator.Builder()
     .newApk(newApk)
     .engineType(EngineType.JAVA)           // Java 引擎（调试方便）
     .patchMode(PatchMode.FULL_DEX)
-    .signingConfig(null)                   // 跳过签名（加快速度）
+    .signingConfig(null)                   // 跳过签名（加快速度�?
     .config(GeneratorConfig.builder()
         .enableParallel(false)             // 禁用并行（方便调试）
         .build())
@@ -641,10 +641,10 @@ PatchGenerator generator = new PatchGenerator.Builder()
 
 ---
 
-### 3. 监控和告警
+### 3. 监控和告�?
 
 ```java
-// 设置性能阈值
+// 设置性能阈�?
 public class PerformanceThreshold {
     public static final long PATCH_GENERATION_MAX = 10_000;  // 10s
     public static final long PATCH_APPLICATION_MAX = 3_000;  // 3s
@@ -662,27 +662,28 @@ public class PerformanceThreshold {
 
 ---
 
-## 🎯 优化检查清单
+## 🎯 优化检查清�?
 
-- [ ] 使用 Native 引擎（2-3倍性能提升）
-- [ ] 启用并行处理（2-4倍性能提升）
-- [ ] 流式处理大文件（避免 OOM）
-- [ ] 缓存中间结果（10-20倍提升）
-- [ ] 优化 ZIP 压缩策略（30-50%提升）
+- [ ] 使用 Native 引擎�?-3倍性能提升�?
+- [ ] 启用并行处理�?-4倍性能提升�?
+- [ ] 流式处理大文件（避免 OOM�?
+- [ ] 缓存中间结果�?0-20倍提升）
+- [ ] 优化 ZIP 压缩策略�?0-50%提升�?
 - [ ] 异步应用补丁（避免卡顿）
-- [ ] 延迟加载非关键资源（50%启动提升）
-- [ ] 缓存签名验证结果（50-100ms提升）
+- [ ] 延迟加载非关键资源（50%启动提升�?
+- [ ] 缓存签名验证结果�?0-100ms提升�?
 - [ ] 及时释放资源（避免内存泄漏）
-- [ ] 使用弱引用缓存（避免 OOM）
-- [ ] 只包含修改的文件（70-90%大小减少）
-- [ ] 使用增量算法（50-80%大小减少）
+- [ ] 使用弱引用缓存（避免 OOM�?
+- [ ] 只包含修改的文件�?0-90%大小减少�?
+- [ ] 使用增量算法�?0-80%大小减少�?
 - [ ] 添加性能监控（及时发现问题）
-- [ ] 设置性能阈值（自动告警）
+- [ ] 设置性能阈值（自动告警�?
 
 ---
 
-## 📚 参考资料
+## 📚 参考资�?
 
 - [Android 性能优化最佳实践](https://developer.android.com/topic/performance)
 - [Java 性能优化指南](https://docs.oracle.com/javase/8/docs/technotes/guides/performance/)
 - [BsDiff 算法优化](http://www.daemonology.net/bsdiff/)
+

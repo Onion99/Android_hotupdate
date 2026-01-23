@@ -2,71 +2,71 @@
 
 ## 📐 整体架构
 
-### 系统架构图
+### 系统架构�?
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         应用层 (App)                              │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
-│  │ MainActivity │  │ UpdateManager│  │ PatchApplier │          │
-│  └──────────────┘  └──────────────┘  └──────────────┘          │
-└─────────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────────┐
-│                    热更新 SDK (update)                            │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              HotUpdateHelper (单例)                       │   │
-│  │  - 补丁应用   - 版本检测   - 格式验证   - 安全验证      │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                              ↓                                   │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐       │
-│  │DexPatcher│  │SoPatcher │  │ResPatcher│  │SecurityMgr│       │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘       │
-└─────────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────────┐
-│              补丁生成引擎 (patch-core)                            │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │                  PatchGenerator                           │   │
-│  │  - APK 解析   - 差异比较   - 补丁打包   - 签名加密      │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                              ↓                                   │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐       │
-│  │ApkParser │  │DexDiffer │  │ResDiffer │  │PatchPacker│       │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘       │
-└─────────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────────┐
-│              Native 引擎 (patch-native)                           │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              NativePatchEngine (JNI)                      │   │
-│  │  - BsDiff 算法   - 高性能处理   - 自动降级              │   │
-│  └──────────────────────────────────────────────────────────┘   │
-│                              ↓                                   │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐                      │
-│  │ BsDiff   │  │ BsPatch  │  │ JKS解析  │                      │
-│  │ (C/C++)  │  │ (C/C++)  │  │ (C/C++)  │                      │
-│  └──────────┘  └──────────┘  └──────────┘                      │
-└─────────────────────────────────────────────────────────────────┘
-                              ↓
-┌─────────────────────────────────────────────────────────────────┐
-│                   服务端 (patch-server)                           │
-│  ┌──────────────────────────────────────────────────────────┐   │
-│  │              Web 管理后台 + RESTful API                   │   │
-│  │  - 补丁管理   - 灰度发布   - 统计分析   - 用户管理      │   │
-│  └──────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────�?
+�?                        应用�?(App)                              �?
+�? ┌──────────────�? ┌──────────────�? ┌──────────────�?         �?
+�? �?MainActivity �? �?UpdateManager�? �?PatchApplier �?         �?
+�? └──────────────�? └──────────────�? └──────────────�?         �?
+└─────────────────────────────────────────────────────────────────�?
+                              �?
+┌─────────────────────────────────────────────────────────────────�?
+�?                   热更�?SDK (update)                            �?
+�? ┌──────────────────────────────────────────────────────────�?  �?
+�? �?             HotUpdateHelper (单例)                       �?  �?
+�? �? - 补丁应用   - 版本检�?  - 格式验证   - 安全验证      �?  �?
+�? └──────────────────────────────────────────────────────────�?  �?
+�?                             �?                                  �?
+�? ┌──────────�? ┌──────────�? ┌──────────�? ┌──────────�?      �?
+�? │DexPatcher�? │SoPatcher �? │ResPatcher�? │SecurityMgr�?      �?
+�? └──────────�? └──────────�? └──────────�? └──────────�?      �?
+└─────────────────────────────────────────────────────────────────�?
+                              �?
+┌─────────────────────────────────────────────────────────────────�?
+�?             补丁生成引擎 (patch-core)                            �?
+�? ┌──────────────────────────────────────────────────────────�?  �?
+�? �?                 PatchGenerator                           �?  �?
+�? �? - APK 解析   - 差异比较   - 补丁打包   - 签名加密      �?  �?
+�? └──────────────────────────────────────────────────────────�?  �?
+�?                             �?                                  �?
+�? ┌──────────�? ┌──────────�? ┌──────────�? ┌──────────�?      �?
+�? │ApkParser �? │DexDiffer �? │ResDiffer �? │PatchPacker�?      �?
+�? └──────────�? └──────────�? └──────────�? └──────────�?      �?
+└─────────────────────────────────────────────────────────────────�?
+                              �?
+┌─────────────────────────────────────────────────────────────────�?
+�?             Native 引擎 (patch-native)                           �?
+�? ┌──────────────────────────────────────────────────────────�?  �?
+�? �?             NativePatchEngine (JNI)                      �?  �?
+�? �? - BsDiff 算法   - 高性能处理   - 自动降级              �?  �?
+�? └──────────────────────────────────────────────────────────�?  �?
+�?                             �?                                  �?
+�? ┌──────────�? ┌──────────�? ┌──────────�?                     �?
+�? �?BsDiff   �? �?BsPatch  �? �?JKS解析  �?                     �?
+�? �?(C/C++)  �? �?(C/C++)  �? �?(C/C++)  �?                     �?
+�? └──────────�? └──────────�? └──────────�?                     �?
+└─────────────────────────────────────────────────────────────────�?
+                              �?
+┌─────────────────────────────────────────────────────────────────�?
+�?                  服务�?(patch-server)                           �?
+�? ┌──────────────────────────────────────────────────────────�?  �?
+�? �?             Web 管理后台 + RESTful API                   �?  �?
+�? �? - 补丁管理   - 灰度发布   - 统计分析   - 用户管理      �?  �?
+�? └──────────────────────────────────────────────────────────�?  �?
+└─────────────────────────────────────────────────────────────────�?
 ```
 
 ---
 
-## 🏗️ 模块设计
+## 🏗�?模块设计
 
-### 1. update 模块（热更新 SDK）
+### 1. update 模块（热更新 SDK�?
 
-**职责**: 补丁应用、加载、验证
+**职责**: 补丁应用、加载、验�?
 
-#### 核心类
+#### 核心�?
 
 ```java
 HotUpdateHelper (单例)
@@ -76,7 +76,7 @@ HotUpdateHelper (单例)
 └── validatePatch()        // 验证补丁
 
 DexPatcher
-├── patchDex()             // DEX 热更新
+├── patchDex()             // DEX 热更�?
 └── loadDex()              // 加载 DEX
 
 SoPatcher
@@ -84,7 +84,7 @@ SoPatcher
 └── loadSo()               // 加载 SO
 
 ResourcePatcher
-├── patchResource()        // 资源热更新
+├── patchResource()        // 资源热更�?
 └── loadResource()         // 加载资源
 
 SecurityManager
@@ -93,39 +93,39 @@ SecurityManager
 └── verifySignature()      // 验证签名
 ```
 
-#### 数据流
+#### 数据�?
 
 ```
 补丁文件 (patch.zip)
-    ↓
-[格式验证] → 检查 ZIP 魔数、patch.json
-    ↓
-[包名验证] → 确保补丁与应用匹配
-    ↓
-[签名验证] → 验证补丁签名（可选）
-    ↓
-[解密] → AES 解密（如果加密）
-    ↓
-[解压] → 提取 DEX、SO、资源文件
-    ↓
+    �?
+[格式验证] �?检�?ZIP 魔数、patch.json
+    �?
+[包名验证] �?确保补丁与应用匹�?
+    �?
+[签名验证] �?验证补丁签名（可选）
+    �?
+[解密] �?AES 解密（如果加密）
+    �?
+[解压] �?提取 DEX、SO、资源文�?
+    �?
 [应用补丁]
-    ├── DexPatcher → 修改 ClassLoader
-    ├── SoPatcher → 修改 nativeLibraryPathElements
-    └── ResourcePatcher → 替换 AssetManager
-    ↓
-[保存状态] → 记录补丁信息，下次启动加载
+    ├── DexPatcher �?修改 ClassLoader
+    ├── SoPatcher �?修改 nativeLibraryPathElements
+    └── ResourcePatcher �?替换 AssetManager
+    �?
+[保存状态] �?记录补丁信息，下次启动加�?
 ```
 
 ---
 
 ### 2. patch-core 模块（补丁生成引擎）
 
-**职责**: APK 解析、差异比较、补丁打包
+**职责**: APK 解析、差异比较、补丁打�?
 
-#### 核心类
+#### 核心�?
 
 ```java
-PatchGenerator (构建器模式)
+PatchGenerator (构建器模�?
 ├── parse()                // 解析 APK
 ├── compare()              // 比较差异
 ├── pack()                 // 打包补丁
@@ -146,7 +146,7 @@ ResourceDiffer
 
 PatchPacker
 ├── pack()                 // 打包补丁
-└── addFile()              // 添加文件到补丁
+└── addFile()              // 添加文件到补�?
 
 JarSigner
 ├── sign()                 // 签名补丁
@@ -157,38 +157,38 @@ JarSigner
 
 ```
 基线 APK (v1.0)  +  新版 APK (v1.1)
-    ↓                    ↓
+    �?                   �?
 [解析 APK]          [解析 APK]
-    ↓                    ↓
+    �?                   �?
 ApkInfo (v1.0)      ApkInfo (v1.1)
-    └────────┬────────────┘
-             ↓
+    └────────┬────────────�?
+             �?
       [差异比较]
-    ┌─────┴─────┐
-    ↓           ↓
+    ┌─────┴─────�?
+    �?          �?
 [DEX 差异]  [资源差异]
-    ↓           ↓
+    �?          �?
 DexDiffResult  ResourceDiffResult
-    └─────┬─────┘
-          ↓
+    └─────┬─────�?
+          �?
     [生成补丁内容]
-    ┌─────┴─────┐
-    ↓           ↓
-patch.json   修改的文件
-    └─────┬─────┘
-          ↓
+    ┌─────┴─────�?
+    �?          �?
+patch.json   修改的文�?
+    └─────┬─────�?
+          �?
     [打包 ZIP]
-          ↓
-    patch.zip (未签名)
-          ↓
-    [签名] (可选)
-          ↓
-    patch.zip (已签名)
+          �?
+    patch.zip (未签�?
+          �?
+    [签名] (可�?
+          �?
+    patch.zip (已签�?
 ```
 
 ---
 
-### 3. patch-native 模块（Native 引擎）
+### 3. patch-native 模块（Native 引擎�?
 
 **职责**: 高性能差异算法、JKS 解析
 
@@ -200,31 +200,31 @@ bsdiff.cpp
 ├── bsdiff()               // 生成差异文件
 └── bspatch()              // 应用差异文件
 
-// JKS 解析器
+// JKS 解析�?
 jks_parser.cpp
 ├── parseKeyStore()        // 解析 JKS 文件
 ├── getPrivateKey()        // 获取私钥
-└── getCertificateChain()  // 获取证书链
+└── getCertificateChain()  // 获取证书�?
 
 // JNI 接口
 jks_jni.cpp
 ├── loadKeyStore()         // JNI: 加载 KeyStore
 ├── getPrivateKey()        // JNI: 获取私钥
-└── getCertificateChain()  // JNI: 获取证书链
+└── getCertificateChain()  // JNI: 获取证书�?
 ```
 
 #### 性能优化
 
-- **多线程处理**: 并行处理多个 DEX 文件
+- **多线程处�?*: 并行处理多个 DEX 文件
 - **内存映射**: 使用 mmap 减少内存拷贝
 - **流式处理**: 大文件流式读取，避免 OOM
 - **自动降级**: Native 不可用时自动使用 Java 实现
 
 ---
 
-### 4. patch-server 模块（服务端）
+### 4. patch-server 模块（服务端�?
 
-**职责**: 补丁管理、灰度发布、统计分析
+**职责**: 补丁管理、灰度发布、统计分�?
 
 #### 技术栈
 
@@ -251,48 +251,48 @@ GET    /api/patches/:id             # 获取补丁详情
 PUT    /api/patches/:id             # 更新补丁
 DELETE /api/patches/:id             # 删除补丁
 
-GET    /api/check-update            # 检查更新
+GET    /api/check-update            # 检查更�?
 GET    /api/download/:id            # 下载补丁
 
-GET    /api/stats/dashboard         # 仪表板统计
+GET    /api/stats/dashboard         # 仪表板统�?
 GET    /api/stats/downloads         # 下载统计
 ```
 
-#### 数据库设计
+#### 数据库设�?
 
 ```sql
--- 用户表
+-- 用户�?
 users
 ├── id (主键)
-├── username (用户名)
+├── username (用户�?
 ├── password (密码哈希)
 ├── role (角色: admin/user)
 └── created_at (创建时间)
 
--- 应用表
+-- 应用�?
 apps
 ├── id (主键)
 ├── app_id (应用 ID)
 ├── name (应用名称)
 ├── package_name (包名)
-├── user_id (所属用户)
+├── user_id (所属用�?
 └── created_at (创建时间)
 
--- 补丁表
+-- 补丁�?
 patches
 ├── id (主键)
 ├── app_id (应用 ID)
-├── version (版本号)
+├── version (版本�?
 ├── base_version (基线版本)
 ├── file_path (文件路径)
 ├── file_size (文件大小)
 ├── md5 (MD5 哈希)
-├── status (状态: draft/published/archived)
-├── rollout_percentage (灰度百分比)
+├── status (状�? draft/published/archived)
+├── rollout_percentage (灰度百分�?
 ├── download_count (下载次数)
 └── created_at (创建时间)
 
--- 下载记录表
+-- 下载记录�?
 downloads
 ├── id (主键)
 ├── patch_id (补丁 ID)
@@ -305,9 +305,9 @@ downloads
 
 ## 🔄 核心算法
 
-### 1. DEX 热更新算法
+### 1. DEX 热更新算�?
 
-**原理**: 修改 ClassLoader 的 dexElements 数组
+**原理**: 修改 ClassLoader �?dexElements 数组
 
 ```java
 // 1. 获取 PathClassLoader
@@ -335,14 +335,14 @@ System.arraycopy(oldDexElements, 0, newDexElements, 1, oldDexElements.length);
 dexElementsField.set(pathList, newDexElements);
 ```
 
-**关键点**:
-- 补丁 DEX 必须在数组前面（优先加载）
-- 类加载器的双亲委派机制
+**关键�?*:
+- 补丁 DEX 必须在数组前面（优先加载�?
+- 类加载器的双亲委派机�?
 - 已加载的类无法替换（需要重启）
 
 ---
 
-### 2. 资源热更新算法
+### 2. 资源热更新算�?
 
 **原理**: 替换 AssetManager
 
@@ -357,21 +357,21 @@ addAssetPath.invoke(newAssetManager, patchResourcePath);
 // 3. 添加原始 APK 路径（作为基线）
 addAssetPath.invoke(newAssetManager, apkPath);
 
-// 4. 替换所有 Resources 对象的 AssetManager
-// 包括：Application、Activity、ContextImpl 等
+// 4. 替换所�?Resources 对象�?AssetManager
+// 包括：Application、Activity、ContextImpl �?
 replaceAssetManager(context, newAssetManager);
 ```
 
-**关键点**:
-- `resources.arsc` 必须使用 STORE 模式（不压缩）
-- 需要重启 Activity 才能看到新资源
-- 需要替换所有 Resources 对象
+**关键�?*:
+- `resources.arsc` 必须使用 STORE 模式（不压缩�?
+- 需要重�?Activity 才能看到新资�?
+- 需要替换所�?Resources 对象
 
 ---
 
 ### 3. SO 库热更新算法
 
-**原理**: 修改 ClassLoader 的 nativeLibraryPathElements
+**原理**: 修改 ClassLoader �?nativeLibraryPathElements
 
 ```java
 // 1. 获取 PathClassLoader
@@ -397,8 +397,8 @@ System.arraycopy(oldElements, 0, newElements, 1, oldElements.length);
 nativeLibraryPathElementsField.set(pathList, newElements);
 ```
 
-**关键点**:
-- 补丁 SO 必须在数组前面（优先加载）
+**关键�?*:
+- 补丁 SO 必须在数组前面（优先加载�?
 - 已加载的 SO 无法替换（需要重启）
 - 不同 ABI 需要不同的 SO 文件
 
@@ -406,23 +406,23 @@ nativeLibraryPathElementsField.set(pathList, newElements);
 
 ### 4. BsDiff 增量算法
 
-**原理**: 二进制差异算法
+**原理**: 二进制差异算�?
 
 ```
-旧文件: [A B C D E F]
-新文件: [A B X D E Y]
+旧文�? [A B C D E F]
+新文�? [A B X D E Y]
 
 差异文件:
 - 保持: A B (offset: 0, length: 2)
-- 替换: C → X (offset: 2, length: 1)
+- 替换: C �?X (offset: 2, length: 1)
 - 保持: D E (offset: 3, length: 2)
-- 替换: F → Y (offset: 5, length: 1)
+- 替换: F �?Y (offset: 5, length: 1)
 ```
 
 **优势**:
 - 补丁文件小（只包含差异）
-- 适合大文件（如 DEX、SO）
-- 压缩率高（通常 10-30%）
+- 适合大文件（�?DEX、SO�?
+- 压缩率高（通常 10-30%�?
 
 ---
 
@@ -432,64 +432,64 @@ nativeLibraryPathElementsField.set(pathList, newElements);
 
 ```
 补丁文件 (patch.zip)
-    ↓
+    �?
 [读取签名信息]
     ├── META-INF/MANIFEST.MF
     ├── META-INF/CERT.SF
     └── META-INF/CERT.RSA
-    ↓
+    �?
 [获取 APK 签名]
     └── PackageManager.getPackageInfo()
-    ↓
+    �?
 [比对签名]
     ├── 证书链匹配？
-    ├── 签名算法匹配？
-    └── 摘要验证通过？
-    ↓
+    ├── 签名算法匹配�?
+    └── 摘要验证通过�?
+    �?
 [验证结果]
-    ├── ✅ 通过 → 继续应用
-    └── ❌ 失败 → 拒绝并清除
+    ├── �?通过 �?继续应用
+    └── �?失败 �?拒绝并清�?
 ```
 
 ### 2. 加密流程
 
 ```
 原始补丁 (patch.zip)
-    ↓
+    �?
 [生成密钥]
-    ├── 方式1: 用户密码 → PBKDF2 → AES Key
-    ├── 方式2: Android KeyStore → AES Key
+    ├── 方式1: 用户密码 �?PBKDF2 �?AES Key
+    ├── 方式2: Android KeyStore �?AES Key
     └── 方式3: ZIP 密码
-    ↓
+    �?
 [AES-256-GCM 加密]
     ├── 加密数据
-    ├── 生成 IV (初始化向量)
+    ├── 生成 IV (初始化向�?
     └── 生成 Auth Tag (认证标签)
-    ↓
+    �?
 加密补丁 (patch.enc)
     ├── Header: [IV][Auth Tag]
     └── Body: [Encrypted Data]
 ```
 
-### 3. 防篡改机制
+### 3. 防篡改机�?
 
 ```
-应用补丁时:
-    ↓
+应用补丁�?
+    �?
 [计算 SHA-256]
-    └── 保存到加密存储
-    ↓
-每次启动时:
-    ↓
+    └── 保存到加密存�?
+    �?
+每次启动�?
+    �?
 [重新计算 SHA-256]
-    ↓
+    �?
 [比对哈希值]
-    ├── ✅ 匹配 → 正常加载
-    └── ❌ 不匹配 → 自动恢复
-        ↓
+    ├── �?匹配 �?正常加载
+    └── �?不匹�?�?自动恢复
+        �?
     [从加密存储恢复]
-        ├── 恢复成功 → 继续
-        └── 恢复失败 → 清除补丁
+        ├── 恢复成功 �?继续
+        └── 恢复失败 �?清除补丁
 ```
 
 ---
@@ -498,29 +498,29 @@ nativeLibraryPathElementsField.set(pathList, newElements);
 
 ### 1. 补丁生成优化
 
-- **并行处理**: 多线程处理多个 DEX 文件
+- **并行处理**: 多线程处理多�?DEX 文件
 - **增量算法**: BsDiff 减少补丁大小
-- **Native 加速**: C/C++ 实现核心算法
-- **流式处理**: 避免大文件 OOM
+- **Native 加�?*: C/C++ 实现核心算法
+- **流式处理**: 避免大文�?OOM
 
 ### 2. 补丁应用优化
 
-- **延迟加载**: 非关键资源延迟加载
+- **延迟加载**: 非关键资源延迟加�?
 - **缓存机制**: 缓存已解析的数据
-- **内存优化**: 及时释放不用的资源
+- **内存优化**: 及时释放不用的资�?
 - **异步处理**: 后台线程处理耗时操作
 
 ### 3. 启动速度优化
 
-- **预加载**: Application.onCreate 中预加载
-- **懒加载**: 按需加载补丁内容
+- **预加�?*: Application.onCreate 中预加载
+- **懒加�?*: 按需加载补丁内容
 - **缓存验证**: 缓存签名验证结果
 
 ---
 
-## 🔧 扩展性设计
+## 🔧 扩展性设�?
 
-### 1. 插件化架构
+### 1. 插件化架�?
 
 ```java
 interface PatchPlugin {
@@ -536,7 +536,7 @@ HotUpdateHelper.getInstance()
     .registerPlugin(new CrashReportPlugin());
 ```
 
-### 2. 自定义引擎
+### 2. 自定义引�?
 
 ```java
 interface PatchEngine {
@@ -544,7 +544,7 @@ interface PatchEngine {
     PatchResult generate(ApkInfo base, ApkInfo target);
 }
 
-// 注册自定义引擎
+// 注册自定义引�?
 PatchGenerator.Builder()
     .customEngine(new MyCustomEngine())
     .build();
@@ -570,27 +570,199 @@ HotUpdateHelper.getInstance()
 
 ## 📝 设计原则
 
-1. **单一职责**: 每个模块只负责一个功能
-2. **开闭原则**: 对扩展开放，对修改关闭
-3. **依赖倒置**: 依赖抽象而不是具体实现
-4. **接口隔离**: 接口最小化，避免臃肿
-5. **组合优于继承**: 使用组合而不是继承
+1. **单一职责**: 每个模块只负责一个功�?
+2. **开闭原�?*: 对扩展开放，对修改关�?
+3. **依赖倒置**: 依赖抽象而不是具体实�?
+4. **接口隔离**: 接口最小化，避免臃�?
+5. **组合优于继承**: 使用组合而不是继�?
 
 ---
 
 ## 🎯 未来规划
 
-1. **插件化支持**: 动态加载插件
-2. **组件化支持**: 模块化热更新
-3. **跨平台支持**: Flutter、React Native
+1. **插件化支�?*: 动态加载插�?
+2. **组件化支�?*: 模块化热更新
+3. **跨平台支�?*: Flutter、React Native
 4. **云端集成**: CDN、推送通知
-5. **AI 优化**: 智能差异分析、自动回滚
+5. **AI 优化**: 智能差异分析、自动回�?
 
 ---
 
-## 📚 参考资料
+## 📚 参考资�?
 
 - [Android ClassLoader 机制](https://source.android.com/docs/core/runtime/dex-format)
 - [AssetManager 源码分析](https://cs.android.com/android/platform/superproject/+/master:frameworks/base/core/java/android/content/res/AssetManager.java)
 - [BsDiff 算法论文](http://www.daemonology.net/bsdiff/)
 - [APK 签名机制](https://source.android.com/docs/security/features/apksigning)
+
+
+
+---
+
+## 🔐 加密架构设计
+
+### 模块职责分离
+
+为了实现更清晰的架构和更好的模块解耦，加密功能被分为两个独立的类：
+
+#### PatchEncryptor（patch-generator-android 模块）
+
+**职责**：补丁生成时的加密
+
+```java
+PatchEncryptor
+├── encryptPatch()                    // 使用 KeyStore 加密
+├── encryptPatchWithPassword()        // 使用密码加密
+├── encrypt()                         // 加密字节数组
+├── getOrCreateEncryptionKey()        // 密钥管理
+└── deriveKeyFromPassword()           // 密码派生密钥
+```
+
+**特点**：
+- 仅用于**生成补丁时加密**
+- 不包含解密功能
+- 使用 AES-256-GCM + PBKDF2
+- 支持 Android KeyStore 和自定义密码两种方式
+
+#### SecurityManager（update 模块）
+
+**职责**：补丁应用时的解密和验证
+
+```java
+SecurityManager
+├── decryptPatch()                    // 使用 KeyStore 解密
+├── decryptPatchWithPassword()        // 使用密码解密
+├── decrypt()                         // 解密字节数组
+├── verifySignature()                 // 验证签名
+└── secureDelete()                    // 安全删除
+```
+
+**特点**：
+- 仅用于**应用补丁时解密**
+- 不包含加密功能（已移除）
+- 使用相同的加密算法确保兼容性
+- 支持签名验证
+
+### 加密流程
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              补丁生成端（设备或服务器）                        │
+│                                                               │
+│  基线 APK + 新版 APK                                          │
+│         ↓                                                     │
+│  [生成补丁] → patch.zip                                       │
+│         ↓                                                     │
+│  [PatchEncryptor.encryptPatchWithPassword()]                 │
+│         ↓                                                     │
+│  patch.zip.enc (加密补丁)                                     │
+│         ↓                                                     │
+│  [上传到服务器或分发]                                          │
+└─────────────────────────────────────────────────────────────┘
+                         ↓
+┌─────────────────────────────────────────────────────────────┐
+│                    客户端应用                                 │
+│                                                               │
+│  [下载加密补丁] → patch.zip.enc                               │
+│         ↓                                                     │
+│  [SecurityManager.decryptPatchWithPassword()]                │
+│         ↓                                                     │
+│  patch.zip (解密后的补丁)                                     │
+│         ↓                                                     │
+│  [HotUpdateHelper.applyPatch()]                              │
+│         ↓                                                     │
+│  补丁应用成功                                                  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 加密算法兼容性
+
+两个类使用**完全相同**的加密算法和参数，确保互操作性：
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| 加密算法 | AES-256-GCM | 认证加密，防篡改 |
+| 密钥长度 | 256 bits | 高安全级别 |
+| IV 长度 | 12 bytes | GCM 标准 |
+| Auth Tag | 128 bits | 认证标签 |
+| 密钥派生 | PBKDF2WithHmacSHA256 | 从密码派生密钥 |
+| 迭代次数 | 10,000 | PBKDF2 迭代 |
+| 盐值 | "OrangeHotUpdateSalt2024" | 固定盐值 |
+
+### 使用示例
+
+#### 设备端生成并加密
+
+```java
+// 1. 生成补丁
+AndroidPatchGenerator generator = new AndroidPatchGenerator.Builder(context)
+    .baseApk(baseApk)
+    .newApk(newApk)
+    .output(patchFile)
+    .callback(new SimpleAndroidGeneratorCallback() {
+        @Override
+        public void onComplete(PatchResult result) {
+            if (result.isSuccess()) {
+                // 2. 加密补丁
+                PatchEncryptor encryptor = new PatchEncryptor(context);
+                String password = "your_secure_password";
+                File encryptedPatch = encryptor.encryptPatchWithPassword(
+                    result.getPatchFile(), 
+                    password
+                );
+                
+                // 3. 上传或分发加密补丁
+                uploadPatch(encryptedPatch);
+            }
+        }
+    })
+    .build();
+
+generator.generateInBackground();
+```
+
+#### 客户端应用加密补丁
+
+```java
+// 1. 下载加密补丁
+File encryptedPatch = downloadPatch();
+
+// 2. 应用加密补丁（自动解密）
+HotUpdateHelper helper = new HotUpdateHelper(context);
+String password = "your_secure_password";
+helper.applyPatchWithAesPassword(encryptedPatch, password, new HotUpdateHelper.Callback() {
+    @Override
+    public void onSuccess(PatchResult result) {
+        Log.i(TAG, "补丁应用成功！");
+    }
+    
+    @Override
+    public void onError(String message) {
+        Log.e(TAG, "补丁应用失败: " + message);
+    }
+});
+```
+
+### 设计优势
+
+1. **职责清晰**：
+   - `PatchEncryptor` 专注于补丁生成时的加密
+   - `SecurityManager` 专注于补丁应用时的解密和验证
+
+2. **模块解耦**：
+   - 用户只需依赖 `update` 模块即可应用补丁
+   - 无需依赖 `patch-generator-android` 模块
+
+3. **灵活部署**：
+   - 补丁可以在设备端生成并加密
+   - 也可以在服务器端使用 CLI 工具生成并加密
+   - 客户端只需要解密和应用功能
+
+4. **向后兼容**：
+   - `SecurityManager` 保留了所有解密方法
+   - 现有代码无需修改即可继续使用
+
+5. **安全性**：
+   - 使用相同的加密算法确保兼容性
+   - 支持多种加密方式（KeyStore、密码）
+   - 防止补丁被窃取或逆向分析

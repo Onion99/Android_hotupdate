@@ -1,60 +1,60 @@
-﻿# Android Hot Update Patch Tool
+# Android Hot Update Patch Tool
 
-[中文](README.md) | English
+[����](README.md) | English
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![API](https://img.shields.io/badge/API-21%2B-brightgreen.svg)](https://android-arsenal.com/api?level=21)
 
 A complete Android hot update solution that supports **DEX, Resources, SO libraries, and Assets** hot updates without reinstalling the APK.
 
-## ✨ Core Features
+## ? Core Features
 
-- 🔥 **True Hot Update** - No app restart required, code takes effect immediately
-- 📱 **Full Support** - DEX, Resources, SO libraries, and Assets fully supported
-- 🚀 **High Performance** - Native engine acceleration, 2-3x faster patch generation
-- 📲 **On-Device Generation** - Generate patches directly on Android devices
-- 🛠️ **Multiple Methods** - Command line, Gradle plugin, Android SDK
-- 🔐 **Secure & Reliable** - Signature verification and encryption to prevent tampering
-- 🔄 **Good Compatibility** - Supports Android 5.0+ (API 21+)
-- ⚡ **Auto Fallback** - Automatically uses Java engine when Native is unavailable
-- 🔧 **Version Detection** - 🆕 Auto-detect APK version changes, clear old patches on upgrade
-- 🔍 **Format Detection** - 🆕 Auto-validate patch format and package name to prevent misuse
-- 🌐 **Management Dashboard** - 🆕 Web admin dashboard with canary release and analytics
+- ?? **True Hot Update** - No app restart required, code takes effect immediately
+- ?? **Full Support** - DEX, Resources, SO libraries, and Assets fully supported
+- ?? **High Performance** - Native engine acceleration, 2-3x faster patch generation
+- ?? **On-Device Generation** - Generate patches directly on Android devices
+- ??? **Multiple Methods** - Command line, Gradle plugin, Android SDK
+- ?? **Secure & Reliable** - Signature verification and encryption to prevent tampering
+- ?? **Good Compatibility** - Supports Android 5.0+ (API 21+)
+- ? **Auto Fallback** - Automatically uses Java engine when Native is unavailable
+- ?? **Version Detection** - ?? Auto-detect APK version changes, clear old patches on upgrade
+- ?? **Format Detection** - ?? Auto-validate patch format and package name to prevent misuse
+- ?? **Management Dashboard** - ?? Web admin dashboard with canary release and analytics
 
-## 📚 Documentation Navigation
+## ?? Documentation Navigation
 
 ### Quick Start
 - **[Quick Start](#-quick-start)** - Get started in 5 minutes
 - **[Demo Download](https://github.com/706412584/Android_hotupdate/releases/tag/demo)** - Download demo APK
 
 ### Core Features
-- **[Singleton Pattern Usage](docs/SINGLETON_PATTERN.md)** - 🆕 Elegant singleton pattern API
-- **[Version Detection and Auto-Clear](docs/VERSION_CHECK.md)** - 🆕 APK version detection, auto-clear patches on upgrade
-- **[Patch Format Detection](docs/PATCH_FORMAT_VALIDATION.md)** - 🆕 Auto-validate patch format and package name
+- **[Singleton Pattern Usage](docs/SINGLETON_PATTERN.md)** - ?? Elegant singleton pattern API
+- **[Version Detection and Auto-Clear](docs/VERSION_CHECK.md)** - ?? APK version detection, auto-clear patches on upgrade
+- **[Patch Format Detection](docs/PATCH_FORMAT_VALIDATION.md)** - ?? Auto-validate patch format and package name
 - **[Security Mechanisms](#-security-mechanisms)** - Signature verification and encryption
 
 ### Architecture and Design
-- **[Architecture Design](docs/ARCHITECTURE.md)** - 🆕 Overall architecture, module design, core algorithms
-- **[Performance Optimization](docs/PERFORMANCE.md)** - 🆕 Patch generation/application optimization, memory optimization
-- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - 🆕 Common issue diagnosis and solutions
+- **[Architecture Design](docs/ARCHITECTURE.md)** - ?? Overall architecture, module design, core algorithms
+- **[Performance Optimization](docs/PERFORMANCE.md)** - ?? Patch generation/application optimization, memory optimization
+- **[Troubleshooting](docs/TROUBLESHOOTING.md)** - ?? Common issue diagnosis and solutions
 
 ### Detailed Documentation
 - **[Detailed Usage](docs/USAGE.md)** - Complete API documentation
 - **[FAQ](docs/FAQ.md)** - Troubleshooting guide
 - **[Patch Format](docs/PATCH_FORMAT.md)** - Patch package structure
-- **[resources.arsc Compression Issue](docs/RESOURCES_ARSC_COMPRESSION_EXPLAINED.md)** - 🆕 Why can't compress?
+- **[resources.arsc Compression Issue](docs/RESOURCES_ARSC_COMPRESSION_EXPLAINED.md)** - ?? Why can't compress?
 
 ### Development Guide
-- **[Project Completion Assessment](docs/PROJECT_STATUS_AND_ROADMAP.md)** - 🆕 Current status and roadmap
-- **[Server Enhancement](docs/SERVER_ENHANCEMENT.md)** - 🆕 Push notifications, CDN integration
+- **[Project Completion Assessment](docs/PROJECT_STATUS_AND_ROADMAP.md)** - ?? Current status and roadmap
+- **[Server Enhancement](docs/SERVER_ENHANCEMENT.md)** - ?? Push notifications, CDN integration
 - **[Release Guide](JITPACK_RELEASE.md)** - How to release new versions
 
-## 🌳 Branch Description
+## ?? Branch Description
 
 - **main** - Main branch with latest stable code
 - **server** - Server deployment branch, Zeabur auto-deploy source (push to this branch only when updating server)
 
-## 🌐 Online Service
+## ?? Online Service
 
 We provide a free patch hosting service for testing and learning:
 
@@ -62,25 +62,25 @@ We provide a free patch hosting service for testing and learning:
 - **Admin Dashboard**: https://android-hotupdateserver.zeabur.app/dashboard
 
 **Features**:
-- ✅ App Management - Create and manage multiple applications
-- ✅ Patch Upload - Manual upload or automatic generation
-- ✅ Version Control - Manage patches for different versions
-- ✅ Update Check - RESTful API for client update checks
-- ✅ Download Statistics - View patch downloads and usage
+- ? App Management - Create and manage multiple applications
+- ? Patch Upload - Manual upload or automatic generation
+- ? Version Control - Manage patches for different versions
+- ? Update Check - RESTful API for client update checks
+- ? Download Statistics - View patch downloads and usage
 
 **Server Dashboard Preview**:
 
 ![Server Dashboard](docs/server-dashboard.png)
 
 **How to Use**:
-1. Click "🌐 Server Test" button in Demo App
+1. Click "?? Server Test" button in Demo App
 2. Login with default credentials to test API features
 3. Refer to [Server API Documentation](patch-server/README.md) for integration
 4. Check [Client Integration Example](app/src/main/java/com/orange/update/ServerTestActivity.java) to learn how to call APIs
 
-> ⚠️ **Note**: This service is for testing and learning only, with storage and bandwidth limits. Not recommended for production use. For production, please refer to [Deployment Guide](patch-server/README.md#deployment) to deploy your own server.
+> ?? **Note**: This service is for testing and learning only, with storage and bandwidth limits. Not recommended for production use. For production, please refer to [Deployment Guide](patch-server/README.md#deployment) to deploy your own server.
 
-## 🚀 Quick Start
+## ?? Quick Start
 
 ### 1. Add Dependencies
 
@@ -107,7 +107,7 @@ dependencies {
 | **patch-core** | `io.github.706412584:patch-core:1.3.8` | Core patch engine |
 | **patch-cli** | [Download JAR](https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.3.8/patch-cli-1.3.8-all.jar) | Command-line tool (standalone) |
 
-> 💡 **Tips**:
+> ?? **Tips**:
 > - The `update` library includes basic functionality, most cases only need this dependency
 > - `patch-native` provides 2-3x performance boost, auto-fallback to Java engine when unavailable
 > - `patch-cli` is a standalone command-line tool, no need to add to project dependencies
@@ -217,7 +217,7 @@ public class MyApplication extends Application {
 }
 ```
 
-## 🔐 Security Mechanisms
+## 🛡️ Security Mechanisms
 
 ### 1. Signature Verification
 
@@ -233,7 +233,27 @@ HotUpdateHelper.getInstance().setSecurityPolicy(
 
 ### 2. AES Encryption
 
-Encrypt patches with AES-256 to protect sensitive code:
+Encrypt patches with AES-256 to protect sensitive code.
+
+**Using PatchEncryptor (On-Device Generation):**
+
+```java
+// Encrypt patch during generation (using PatchEncryptor)
+PatchEncryptor encryptor = new PatchEncryptor(context);
+String password = "your_secure_password";
+File encryptedPatch = encryptor.encryptPatchWithPassword(patchFile, password);
+
+// Decrypt when applying patch (using SecurityManager)
+HotUpdateHelper helper = new HotUpdateHelper(context);
+helper.applyPatchWithAesPassword(encryptedPatch, password, callback);
+```
+
+> 💡 **Architecture Note**:
+> - **PatchEncryptor** (`patch-generator-android` module): Used for encrypting patches during generation
+> - **SecurityManager** (`update` module): Used for decrypting patches during application
+> - Both classes use the same encryption algorithm (AES-256-GCM + PBKDF2) to ensure compatibility
+
+**Using CLI Tool (Server-Side Generation):**
 
 ```bash
 # Generate encrypted patch
@@ -258,26 +278,26 @@ java -jar patch-cli.jar \
   --zip-password "your-zip-password"
 ```
 
-## 📦 Patch Package Structure
+## ?? Patch Package Structure
 
 ```
 patch.zip
-├── patch.json          # Patch metadata
-├── classes.dex         # DEX patch (if any)
-├── classes2.dex        # Additional DEX (if any)
-├── res/                # Resource patch (if any)
-│   └── ...
-├── lib/                # SO library patch (if any)
-│   └── ...
-├── assets/             # Assets patch (if any)
-│   └── ...
-└── META-INF/           # Signature files (if signed)
-    ├── MANIFEST.MF
-    ├── CERT.SF
-    └── CERT.RSA
+������ patch.json          # Patch metadata
+������ classes.dex         # DEX patch (if any)
+������ classes2.dex        # Additional DEX (if any)
+������ res/                # Resource patch (if any)
+��   ������ ...
+������ lib/                # SO library patch (if any)
+��   ������ ...
+������ assets/             # Assets patch (if any)
+��   ������ ...
+������ META-INF/           # Signature files (if signed)
+    ������ MANIFEST.MF
+    ������ CERT.SF
+    ������ CERT.RSA
 ```
 
-## 🔄 Rollback Support
+## ?? Rollback Support
 
 ```java
 // Clear current patch (rollback to original APK)
@@ -295,7 +315,7 @@ HotUpdateHelper.getInstance().clearPatch(new HotUpdateHelper.Callback() {
 });
 ```
 
-## 🎯 Use Cases
+## ?? Use Cases
 
 - **Bug Fixes** - Fix critical bugs without app store review
 - **Feature Toggles** - Enable/disable features remotely
@@ -303,18 +323,18 @@ HotUpdateHelper.getInstance().clearPatch(new HotUpdateHelper.Callback() {
 - **Emergency Updates** - Deploy urgent fixes immediately
 - **Resource Updates** - Update UI, strings, images without reinstall
 
-## ⚠️ Limitations
+## ?? Limitations
 
 1. **Cannot modify AndroidManifest.xml** - Manifest changes require full APK update
 2. **Cannot add new Activities/Services** - New components require manifest changes
 3. **Cannot modify Application class** - Application class loaded before patch
 4. **Obfuscation compatibility** - Keep same ProGuard rules between versions
 
-## 🤝 Contributing
+## ?? Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-## 📄 License
+## ?? License
 
 ```
 Copyright 2024 Android Hot Update
@@ -332,17 +352,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ```
 
-## 🙏 Acknowledgments
+## ?? Acknowledgments
 
 - [Tinker](https://github.com/Tencent/tinker) - Inspiration for resource patching
 - [AndFix](https://github.com/alibaba/AndFix) - Inspiration for hot fix mechanism
 - [Robust](https://github.com/Meituan-Dianping/Robust) - Inspiration for patch generation
 
-## 📞 Contact
+## ?? Contact
 
 - **Issues**: [GitHub Issues](https://github.com/706412584/Android_hotupdate/issues)
 - **Email**: 706412584@qq.com
 
 ---
 
-**Star ⭐ this repo if you find it helpful!**
+**Star ? this repo if you find it helpful!**
+

@@ -3,10 +3,12 @@ package com.orange.update.fragment;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.text.InputType;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ProgressBar;
 import android.widget.TextView;
 
@@ -14,6 +16,7 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
 import androidx.lifecycle.ViewModelProvider;
 
@@ -113,6 +116,22 @@ public class PatchApplyFragment extends Fragment {
         // 观察应用状态
         viewModel.getApplyStatus().observe(getViewLifecycleOwner(), status -> {
             tvStatus.setText(status);
+            
+            // 处理 AES 密码要求
+            if ("AES_PASSWORD_REQUIRED".equals(status)) {
+                File patchFile = viewModel.getPatchFile();
+                if (patchFile != null) {
+                    showAesPasswordDialog(patchFile);
+                }
+            }
+            
+            // 处理 ZIP 密码要求
+            if ("ZIP_PASSWORD_REQUIRED".equals(status)) {
+                File patchFile = viewModel.getPatchFile();
+                if (patchFile != null) {
+                    showZipPasswordDialog(patchFile);
+                }
+            }
         });
         
         // 观察安全策略错误
@@ -300,5 +319,83 @@ public class PatchApplyFragment extends Fragment {
                 android.os.Process.killProcess(android.os.Process.myPid());
             }
         }
+    }
+    
+    /**
+     * 显示 AES 密码输入对话框
+     */
+    private void showAesPasswordDialog(File patchFile) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
+        builder.setTitle("🔐 需要密码");
+        builder.setMessage("此补丁使用自定义密码加密，请输入密码：");
+        builder.setCancelable(false);
+        
+        // 创建密码输入框
+        final EditText input = new EditText(requireContext());
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        input.setHint("请输入密码");
+        
+        // 添加内边距
+        int padding = (int) (16 * getResources().getDisplayMetrics().density);
+        input.setPadding(padding, padding, padding, padding);
+        
+        builder.setView(input);
+        
+        builder.setPositiveButton("确定", (dialog, which) -> {
+            String password = input.getText().toString();
+            if (password.isEmpty()) {
+                DialogHelper.showToast(requireContext(), "密码不能为空");
+                // 重新显示对话框
+                showAesPasswordDialog(patchFile);
+                return;
+            }
+            viewModel.applyPatchWithAesPassword(patchFile, password);
+        });
+        
+        builder.setNegativeButton("取消", (dialog, which) -> {
+            DialogHelper.showToast(requireContext(), "已取消应用补丁");
+            viewModel.resetApplyStatus();
+        });
+        
+        builder.show();
+    }
+    
+    /**
+     * 显示 ZIP 密码输入对话框
+     */
+    private void showZipPasswordDialog(File patchFile) {
+        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext());
+        builder.setTitle("🔐 需要 ZIP 密码");
+        builder.setMessage("此补丁使用 ZIP 密码保护，请输入密码：");
+        builder.setCancelable(false);
+        
+        // 创建密码输入框
+        final EditText input = new EditText(requireContext());
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        input.setHint("请输入 ZIP 密码");
+        
+        // 添加内边距
+        int padding = (int) (16 * getResources().getDisplayMetrics().density);
+        input.setPadding(padding, padding, padding, padding);
+        
+        builder.setView(input);
+        
+        builder.setPositiveButton("确定", (dialog, which) -> {
+            String password = input.getText().toString();
+            if (password.isEmpty()) {
+                DialogHelper.showToast(requireContext(), "密码不能为空");
+                // 重新显示对话框
+                showZipPasswordDialog(patchFile);
+                return;
+            }
+            viewModel.applyPatchWithZipPassword(patchFile, password);
+        });
+        
+        builder.setNegativeButton("取消", (dialog, which) -> {
+            DialogHelper.showToast(requireContext(), "已取消应用补丁");
+            viewModel.resetApplyStatus();
+        });
+        
+        builder.show();
     }
 }

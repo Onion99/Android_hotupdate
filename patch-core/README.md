@@ -1,14 +1,14 @@
-# Patch Core 核心库
+# Patch Core 核心�?
 
-补丁生成器的核心引擎模块，提供 APK 解析、差异比较、补丁打包和签名功能。
+补丁生成器的核心引擎模块，提�?APK 解析、差异比较、补丁打包和签名功能�?
 
-## 功能特性
+## 功能特�?
 
-- **APK 解析**: 解析 APK 文件，提取 dex、资源和 assets
-- **Dex 差异比较**: 比较两个 dex 文件，识别修改、新增、删除的类
-- **资源差异比较**: 比较资源文件和 assets 目录
+- **APK 解析**: 解析 APK 文件，提�?dex、资源和 assets
+- **Dex 差异比较**: 比较两个 dex 文件，识别修改、新增、删除的�?
+- **资源差异比较**: 比较资源文件�?assets 目录
 - **补丁打包**: 将差异内容打包为补丁文件
-- **补丁签名**: 使用 RSA-2048 对补丁进行签名
+- **补丁签名**: 使用 RSA-2048 对补丁进行签�?
 
 ## 依赖
 
@@ -16,14 +16,14 @@
 implementation project(':patch-core')
 ```
 
-## 快速开始
+## 快速开�?
 
 ### 基本用法
 
 ```java
-import com.orange.patchgen.PatchGenerator;
-import com.orange.patchgen.config.SigningConfig;
-import com.orange.patchgen.model.PatchResult;
+import io.github.706412584.patchgen.PatchGenerator;
+import io.github.706412584.patchgen.config.SigningConfig;
+import io.github.706412584.patchgen.model.PatchResult;
 
 // 配置签名
 SigningConfig signingConfig = SigningConfig.builder()
@@ -33,7 +33,7 @@ SigningConfig signingConfig = SigningConfig.builder()
     .keyPassword("password")
     .build();
 
-// 创建生成器
+// 创建生成�?
 PatchGenerator generator = new PatchGenerator.Builder()
     .baseApk(new File("app-v1.0.apk"))
     .newApk(new File("app-v1.1.apk"))
@@ -88,16 +88,16 @@ PatchGenerator generator = new PatchGenerator.Builder()
     .build();
 ```
 
-## 补丁包格式
+## 补丁包格�?
 
-生成的补丁包是一个 zip 文件，包含以下结构：
+生成的补丁包是一�?zip 文件，包含以下结构：
 
 ```
 patch.zip
-├── patch.json          # 补丁元信息
-├── classes.dex         # 修改的 dex 文件
-├── res/                # 修改的资源文件
-├── assets/             # 修改的 assets
+├── patch.json          # 补丁元信�?
+├── classes.dex         # 修改�?dex 文件
+├── res/                # 修改的资源文�?
+├── assets/             # 修改�?assets
 └── signature.sig       # 签名文件
 ```
 
@@ -105,7 +105,7 @@ patch.zip
 
 ### PatchGenerator
 
-主要的补丁生成器类。
+主要的补丁生成器类�?
 
 | 方法 | 说明 |
 |------|------|
@@ -115,9 +115,9 @@ patch.zip
 
 ### PatchResult
 
-生成结果类。
+生成结果类�?
 
-| 属性 | 说明 |
+| 属�?| 说明 |
 |------|------|
 | `success` | 是否成功 |
 | `patchFile` | 补丁文件 |
@@ -125,6 +125,7 @@ patch.zip
 | `generateTime` | 生成耗时 |
 | `diffSummary` | 差异摘要 |
 
-## 许可证
+## 许可�?
 
 Apache License 2.0
+

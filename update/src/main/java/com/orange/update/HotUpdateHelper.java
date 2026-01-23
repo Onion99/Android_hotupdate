@@ -419,15 +419,24 @@ public class HotUpdateHelper {
                     logD("检测到 ZIP 密码加密");
                     
                     if (callback != null) {
-                        callback.onProgress(25, "检查 ZIP 密码保护...");
+                        callback.onProgress(25, "尝试解密 ZIP 密码保护...");
                     }
                     
-                    // 检查是否有密码提示文件（.zippwd）
-                    File zipPasswordFile = new File(patchFile.getPath() + ".zippwd");
-                    boolean hasCustomPassword = zipPasswordFile.exists();
+                    // 尝试使用派生密码解密
+                    String derivedPassword = zipPasswordManager.getZipPassword();
+                    boolean canDecryptWithDerivedPassword = false;
                     
-                    if (hasCustomPassword) {
-                        Log.d(TAG, "检测到自定义 ZIP 密码，需要用户输入");
+                    try {
+                        // 测试派生密码是否可以解密
+                        canDecryptWithDerivedPassword = zipPasswordManager.testPassword(actualPatchFile, derivedPassword);
+                        logD("派生密码测试结果: " + canDecryptWithDerivedPassword);
+                    } catch (Exception e) {
+                        logD("派生密码测试失败: " + e.getMessage());
+                    }
+                    
+                    // 如果派生密码无法解密，说明使用了自定义密码
+                    if (!canDecryptWithDerivedPassword) {
+                        logD("派生密码无法解密，需要用户输入自定义密码");
                         
                         // 清理临时解密文件
                         if (tempDecryptedFile != null && tempDecryptedFile.exists()) {
@@ -441,7 +450,7 @@ public class HotUpdateHelper {
                         return; // 等待用户输入密码后调用 applyPatchWithZipPassword()
                     }
                     
-                    // 没有自定义密码，直接保存加密文件到 applied 目录
+                    // 派生密码可以解密，直接保存加密文件到 applied 目录
                     // 应用启动时会自动使用派生密码解密
                     logD("使用派生密码，补丁将以加密状态保存");
                 }
@@ -1433,13 +1442,38 @@ public class HotUpdateHelper {
                        "当前文件: " + fileName;
             }
             
-            // 2. 检查是否是有效的 ZIP 文件（通过魔数验证）
+            // 2. 如果是 AES 加密文件，跳过格式验证（需要先解密）
+            if (isEnc) {
+                logI("✅ 检测到 AES 加密补丁文件，跳过格式验证");
+                logI("   - 文件格式: AES 加密 (.enc)");
+                logI("   - 将在解密后进行验证");
+                return null; // 加密文件跳过验证，解密后再验证
+            }
+            
+            // 3. 检查是否是 ZIP 密码加密（使用 zip4j）
+            boolean isZipPasswordEncrypted = false;
+            try {
+                ensureStorageInitialized();
+                ZipPasswordManager zipPasswordManager = storage.getZipPasswordManager();
+                isZipPasswordEncrypted = zipPasswordManager.isEncrypted(patchFile);
+            } catch (Exception e) {
+                logD("检查 ZIP 密码加密失败: " + e.getMessage());
+            }
+            
+            if (isZipPasswordEncrypted) {
+                logI("✅ 检测到 ZIP 密码加密补丁文件，跳过格式验证");
+                logI("   - 文件格式: ZIP 密码加密");
+                logI("   - 将在解密后进行验证");
+                return null; // ZIP 密码加密文件跳过验证，解密后再验证
+            }
+            
+            // 4. 检查是否是有效的 ZIP 文件（通过魔数验证）
             if (isZip && !isValidZipFile(patchFile)) {
                 return "⚠️ 补丁文件损坏！\n\n" +
                        "文件不是有效的 ZIP 格式，可能已损坏或被篡改。";
             }
             
-            // 3. 读取并验证 patch.json
+            // 5. 读取并验证 patch.json
             PatchInfo patchInfo = readPatchInfoFromZip(patchFile);
             if (patchInfo == null) {
                 return "⚠️ 补丁文件格式错误！\n\n" +
@@ -1447,7 +1481,7 @@ public class HotUpdateHelper {
                        "请确保补丁文件是通过官方工具生成的。";
             }
             
-            // 4. 验证包名（必须与当前应用包名一致）
+            // 6. 验证包名（必须与当前应用包名一致）
             String patchPackageName = patchInfo.getPackageName();
             String currentPackageName = context.getPackageName();
             
@@ -1462,7 +1496,7 @@ public class HotUpdateHelper {
             }
             
             logI("✅ 补丁格式验证通过");
-            logI("   - 文件格式: " + (isZip ? "ZIP" : "加密"));
+            logI("   - 文件格式: ZIP");
             logI("   - 补丁版本: " + patchInfo.getPatchVersion());
             logI("   - 目标版本: " + patchInfo.getTargetAppVersion());
             logI("   - 包名: " + (patchPackageName != null ? patchPackageName : "未指定（兼容模式）"));
@@ -1878,6 +1912,8 @@ public class HotUpdateHelper {
         }
         
         executor.execute(() -> {
+            File tempDecryptedDir = null;
+            File tempDecryptedFile = null;
             try {
                 // 通知开始
                 if (callback != null) {
@@ -1910,18 +1946,76 @@ public class HotUpdateHelper {
                 
                 logD("✓ ZIP 密码验证成功");
                 
-                // 3. 保存自定义密码到 SharedPreferences（用于应用启动时解密）
+                if (callback != null) {
+                    callback.onProgress(15, "解密 ZIP 文件...");
+                }
+                
+                // 3. 解密 ZIP 文件到临时目录
+                tempDecryptedDir = new File(context.getCacheDir(), "temp_zip_decrypt_" + System.currentTimeMillis());
+                tempDecryptedDir.mkdirs();
+                
+                boolean extracted = zipPasswordManager.extractEncryptedZip(patchFile, tempDecryptedDir, zipPassword);
+                if (!extracted) {
+                    if (callback != null) {
+                        callback.onError("解密 ZIP 文件失败");
+                    }
+                    return;
+                }
+                
+                // 4. 重新打包解密后的文件（不加密）
+                tempDecryptedFile = new File(context.getCacheDir(), "temp_decrypted_" + System.currentTimeMillis() + ".zip");
+                
+                net.lingala.zip4j.ZipFile decryptedZip = new net.lingala.zip4j.ZipFile(tempDecryptedFile);
+                File[] files = tempDecryptedDir.listFiles();
+                if (files != null) {
+                    for (File file : files) {
+                        if (file.isDirectory()) {
+                            decryptedZip.addFolder(file);
+                        } else {
+                            decryptedZip.addFile(file);
+                        }
+                    }
+                }
+                
+                logD("✓ ZIP 文件解密成功");
+                
+                // 5. 保存自定义密码到 SharedPreferences（用于应用启动时解密）
                 android.content.SharedPreferences prefs = context.getSharedPreferences("patch_storage_prefs", Context.MODE_PRIVATE);
                 prefs.edit()
                     .putBoolean("is_zip_password_protected", true)
                     .putString("custom_zip_password", zipPassword)
                     .apply();
                 
-                // 4. 继续应用补丁流程（保存加密文件到 applied 目录）
-                applyPatchInternal(patchFile, patchFile, callback);
+                // 6. 继续应用补丁流程
+                // actualPatchFile: 解密后的文件（用于应用）
+                // originalPatchFile: 原始加密文件（用于保存）
+                File finalTempDecryptedFile = tempDecryptedFile;
+                File finalTempDecryptedDir = tempDecryptedDir;
+                try {
+                    applyPatchInternal(tempDecryptedFile, patchFile, callback);
+                } finally {
+                    // 清理临时文件
+                    if (finalTempDecryptedFile != null && finalTempDecryptedFile.exists()) {
+                        finalTempDecryptedFile.delete();
+                        logD("✓ 清理临时解密文件");
+                    }
+                    if (finalTempDecryptedDir != null && finalTempDecryptedDir.exists()) {
+                        deleteDirectory(finalTempDecryptedDir);
+                        logD("✓ 清理临时解密目录");
+                    }
+                }
                 
             } catch (Exception e) {
                 Log.e(TAG, "应用补丁失败", e);
+                
+                // 清理临时文件
+                if (tempDecryptedFile != null && tempDecryptedFile.exists()) {
+                    tempDecryptedFile.delete();
+                }
+                if (tempDecryptedDir != null && tempDecryptedDir.exists()) {
+                    deleteDirectory(tempDecryptedDir);
+                }
+                
                 if (callback != null) {
                     callback.onError("应用补丁失败: " + e.getMessage());
                 }

@@ -50,19 +50,21 @@ del temp_token.txt
 
 echo Choose operation:
 echo.
-echo 1. Quick Publish (Recommended) - Build patch-core only and upload
-echo 2. Full Publish - Clean, build, and upload
-echo 3. Check deployment status
-echo 4. Check Maven Central sync status
-echo 5. Clear all deployments
+echo 1. Quick Publish (Recommended) - Build 5 modules and upload
+echo 2. Full Publish - Clean, build 5 modules, and upload
+echo 3. Publish patch-gradle-plugin to Maven Central
+echo 4. Check deployment status
+echo 5. Check Maven Central sync status
+echo 6. Clear all deployments
 echo.
-set /p CHOICE="Enter option (1-5): "
+set /p CHOICE="Enter option (1-6): "
 
 if "%CHOICE%"=="1" goto QUICK_PUBLISH
 if "%CHOICE%"=="2" goto FULL_PUBLISH
-if "%CHOICE%"=="3" goto CHECK_STATUS
-if "%CHOICE%"=="4" goto CHECK_MAVEN
-if "%CHOICE%"=="5" goto CLEAR_DEPLOYMENTS
+if "%CHOICE%"=="3" goto PUBLISH_PLUGIN
+if "%CHOICE%"=="4" goto CHECK_STATUS
+if "%CHOICE%"=="5" goto CHECK_MAVEN
+if "%CHOICE%"=="6" goto CLEAR_DEPLOYMENTS
 
 echo Invalid option
 pause
@@ -255,6 +257,46 @@ echo   2. Wait for validation (about 2-5 minutes)
 echo   3. Click "Publish" to release
 echo.
 cd ..
+pause
+exit /b 0
+
+:PUBLISH_PLUGIN
+echo.
+echo ========================================
+echo Publish patch-gradle-plugin to Maven Central
+echo ========================================
+echo.
+echo This will publish patch-gradle-plugin to Maven Central only.
+echo To publish to Gradle Plugin Portal, use: publish-plugin.bat
+echo.
+set /p CONFIRM="Continue? (Y/N): "
+if /i not "%CONFIRM%"=="Y" (
+    echo Cancelled
+    pause
+    exit /b 0
+)
+
+echo.
+echo Publishing patch-gradle-plugin...
+cd ..
+call gradlew.bat :patch-gradle-plugin:clean :patch-gradle-plugin:publishPluginMavenPublicationToSonatypeRepository
+if errorlevel 1 (
+    echo [ERROR] Publish failed
+    pause
+    exit /b 1
+)
+
+echo.
+echo [SUCCESS] patch-gradle-plugin published to Maven Central!
+echo.
+echo Next steps:
+echo   1. Visit https://central.sonatype.com/publishing/deployments
+echo   2. Wait for validation (about 2-5 minutes)
+echo   3. Click "Publish" to release
+echo.
+echo To also publish to Gradle Plugin Portal, run: publish-plugin.bat
+echo.
+cd maven-central
 pause
 exit /b 0
 

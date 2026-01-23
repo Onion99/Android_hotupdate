@@ -270,6 +270,130 @@ public class PatchApplyViewModel extends ViewModel {
         }
     }
     
+    /**
+     * 使用 AES 密码应用补丁
+     * 
+     * @param patchFile 补丁文件
+     * @param password AES 密码
+     */
+    public void applyPatchWithAesPassword(File patchFile, String password) {
+        if (hotUpdateHelper == null) {
+            HotUpdateHelper.PatchResult failureResult = new HotUpdateHelper.PatchResult();
+            failureResult.success = false;
+            applyResult.setValue(failureResult);
+            applyStatus.setValue("HotUpdateHelper 未初始化");
+            return;
+        }
+        
+        isApplying.setValue(true);
+        applyProgress.setValue(0);
+        applyStatus.setValue("使用密码解密并应用补丁...");
+        
+        hotUpdateHelper.applyPatchWithAesPassword(patchFile, password, new HotUpdateHelper.Callback() {
+            @Override
+            public void onProgress(int percent, String message) {
+                applyProgress.postValue(percent);
+                applyStatus.postValue(message);
+            }
+            
+            @Override
+            public void onSuccess(HotUpdateHelper.PatchResult result) {
+                isApplying.postValue(false);
+                isPatchApplied.postValue(true);
+                applyResult.postValue(result);
+            }
+            
+            @Override
+            public void onError(String message) {
+                isApplying.postValue(false);
+                HotUpdateHelper.PatchResult failureResult = new HotUpdateHelper.PatchResult();
+                failureResult.success = false;
+                applyResult.postValue(failureResult);
+                applyStatus.postValue(message);
+            }
+            
+            @Override
+            public void onZipPasswordRequired(File patchFileToDecrypt) {
+                isApplying.postValue(false);
+                applyStatus.postValue("ZIP_PASSWORD_REQUIRED");
+            }
+            
+            @Override
+            public void onAesPasswordRequired(File patchFileToDecrypt) {
+                isApplying.postValue(false);
+                applyStatus.postValue("密码错误，请重试");
+                // 重新显示密码对话框
+                applyStatus.postValue("AES_PASSWORD_REQUIRED");
+            }
+        });
+    }
+    
+    /**
+     * 使用 ZIP 密码应用补丁
+     * 
+     * @param patchFile 补丁文件
+     * @param password ZIP 密码
+     */
+    public void applyPatchWithZipPassword(File patchFile, String password) {
+        if (hotUpdateHelper == null) {
+            HotUpdateHelper.PatchResult failureResult = new HotUpdateHelper.PatchResult();
+            failureResult.success = false;
+            applyResult.setValue(failureResult);
+            applyStatus.setValue("HotUpdateHelper 未初始化");
+            return;
+        }
+        
+        isApplying.setValue(true);
+        applyProgress.setValue(0);
+        applyStatus.setValue("使用 ZIP 密码解密并应用补丁...");
+        
+        hotUpdateHelper.applyPatchWithZipPassword(patchFile, password, new HotUpdateHelper.Callback() {
+            @Override
+            public void onProgress(int percent, String message) {
+                applyProgress.postValue(percent);
+                applyStatus.postValue(message);
+            }
+            
+            @Override
+            public void onSuccess(HotUpdateHelper.PatchResult result) {
+                isApplying.postValue(false);
+                isPatchApplied.postValue(true);
+                applyResult.postValue(result);
+            }
+            
+            @Override
+            public void onError(String message) {
+                isApplying.postValue(false);
+                HotUpdateHelper.PatchResult failureResult = new HotUpdateHelper.PatchResult();
+                failureResult.success = false;
+                applyResult.postValue(failureResult);
+                applyStatus.postValue(message);
+            }
+            
+            @Override
+            public void onZipPasswordRequired(File patchFileToDecrypt) {
+                isApplying.postValue(false);
+                applyStatus.postValue("ZIP 密码错误，请重试");
+                // 重新显示密码对话框
+                applyStatus.postValue("ZIP_PASSWORD_REQUIRED");
+            }
+            
+            @Override
+            public void onAesPasswordRequired(File patchFileToDecrypt) {
+                isApplying.postValue(false);
+                applyStatus.postValue("AES_PASSWORD_REQUIRED");
+            }
+        });
+    }
+    
+    /**
+     * 重置应用状态
+     */
+    public void resetApplyStatus() {
+        applyStatus.setValue("");
+        isApplying.setValue(false);
+    }
+    
     // Getters for LiveData
     public LiveData<Integer> getApplyProgress() {
         return applyProgress;

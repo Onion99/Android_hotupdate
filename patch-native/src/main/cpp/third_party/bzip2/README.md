@@ -21,3 +21,4 @@ Required source files:
 
 bzip2 is released under a BSD-style license.
 Copyright (C) 1996-2019 Julian Seward <jseward@acm.org>
+

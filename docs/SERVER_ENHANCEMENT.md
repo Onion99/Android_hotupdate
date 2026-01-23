@@ -1,11 +1,11 @@
-# 服务端增强功能
+# 服务端增强功�?
 
-## 📋 当前状态
+## 📋 当前状�?
 
-### ✅ 已实现的功能
+### �?已实现的功能
 - Web 管理后台
 - RESTful API
-- 补丁上传和管理
+- 补丁上传和管�?
 - 灰度发布
 - 统计分析
 - 用户管理
@@ -21,7 +21,7 @@
 
 ### 功能说明
 
-当有新补丁发布时，自动通知用户更新。
+当有新补丁发布时，自动通知用户更新�?
 
 ### 实现方案
 
@@ -29,8 +29,8 @@
 
 **优点**:
 - Google 官方支持
-- 免费且可靠
-- 支持 Android 和 iOS
+- 免费且可�?
+- 支持 Android �?iOS
 
 **实现步骤**:
 
@@ -40,7 +40,7 @@
 // patch-server/backend/src/services/fcm.js
 const admin = require('firebase-admin');
 
-// 初始化 Firebase Admin SDK
+// 初始�?Firebase Admin SDK
 admin.initializeApp({
   credential: admin.credential.cert({
     projectId: process.env.FIREBASE_PROJECT_ID,
@@ -53,7 +53,7 @@ admin.initializeApp({
 async function sendPushNotification(deviceToken, patchInfo) {
   const message = {
     notification: {
-      title: '新补丁可用',
+      title: '新补丁可�?,
       body: `${patchInfo.appName} v${patchInfo.version} 已发布`
     },
     data: {
@@ -74,11 +74,11 @@ async function sendPushNotification(deviceToken, patchInfo) {
   }
 }
 
-// 批量发送
+// 批量发�?
 async function sendBatchNotifications(deviceTokens, patchInfo) {
   const messages = deviceTokens.map(token => ({
     notification: {
-      title: '新补丁可用',
+      title: '新补丁可�?,
       body: `${patchInfo.appName} v${patchInfo.version} 已发布`
     },
     data: {
@@ -142,7 +142,7 @@ router.post('/send-patch-notification', async (req, res) => {
       return res.status(404).json({ error: 'Patch not found' });
     }
     
-    // 获取所有设备
+    // 获取所有设�?
     const devices = await Device.findAll({
       where: { appId: patch.appId }
     });
@@ -170,7 +170,7 @@ router.post('/send-patch-notification', async (req, res) => {
 module.exports = router;
 ```
 
-3. **Android 客户端集成**
+3. **Android 客户端集�?*
 
 ```java
 // app/src/main/java/com/orange/update/fcm/MyFirebaseMessagingService.java
@@ -178,7 +178,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
     
     @Override
     public void onMessageReceived(RemoteMessage remoteMessage) {
-        // 处理推送消息
+        // 处理推送消�?
         if (remoteMessage.getData().size() > 0) {
             String patchId = remoteMessage.getData().get("patchId");
             String version = remoteMessage.getData().get("version");
@@ -194,7 +194,7 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
     
     @Override
     public void onNewToken(String token) {
-        // 上传新 Token 到服务器
+        // 上传�?Token 到服务器
         uploadTokenToServer(token);
     }
     
@@ -238,12 +238,12 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
 
 ---
 
-#### 方案 B：极光推送 (JPush)
+#### 方案 B：极光推�?(JPush)
 
 **优点**:
 - 国内网络环境友好
-- 支持 Android 和 iOS
-- 免费版足够使用
+- 支持 Android �?iOS
+- 免费版足够使�?
 
 **实现步骤**:
 
@@ -262,7 +262,7 @@ async function sendPushNotification(registrationId, patchInfo) {
   try {
     const result = await client.push().setPlatform('android')
       .setAudience(JPush.registration_id(registrationId))
-      .setNotification('新补丁可用', JPush.android(
+      .setNotification('新补丁可�?, JPush.android(
         `${patchInfo.appName} v${patchInfo.version} 已发布`,
         null,
         1,
@@ -286,7 +286,7 @@ module.exports = {
 };
 ```
 
-2. **Android 客户端集成**
+2. **Android 客户端集�?*
 
 ```java
 // app/src/main/java/com/orange/update/jpush/MyJPushReceiver.java
@@ -320,14 +320,14 @@ public class MyJPushReceiver extends BroadcastReceiver {
 
 ### 功能说明
 
-使用 CDN 加速补丁文件下载，提升用户体验。
+使用 CDN 加速补丁文件下载，提升用户体验�?
 
 ### 实现方案
 
 #### 方案 A：阿里云 OSS
 
 **优点**:
-- 国内访问速度快
+- 国内访问速度�?
 - 价格便宜
 - 稳定可靠
 
@@ -346,7 +346,7 @@ const client = new OSS({
   bucket: process.env.OSS_BUCKET
 });
 
-// 上传文件到 OSS
+// 上传文件�?OSS
 async function uploadToOSS(localPath, remotePath) {
   try {
     const result = await client.put(remotePath, localPath);
@@ -358,7 +358,7 @@ async function uploadToOSS(localPath, remotePath) {
   }
 }
 
-// 生成签名 URL（有效期 1 小时）
+// 生成签名 URL（有效期 1 小时�?
 async function getSignedUrl(remotePath) {
   try {
     const url = client.signatureUrl(remotePath, {
@@ -401,7 +401,7 @@ router.post('/patches', upload.single('file'), async (req, res) => {
     const file = req.file;
     const { appId, version, baseVersion } = req.body;
     
-    // 上传到 OSS
+    // 上传�?OSS
     const remotePath = `patches/${appId}/${version}/${file.filename}`;
     const ossUrl = await uploadToOSS(file.path, remotePath);
     
@@ -426,7 +426,7 @@ router.post('/patches', upload.single('file'), async (req, res) => {
   }
 });
 
-// 下载补丁（返回签名 URL）
+// 下载补丁（返回签�?URL�?
 router.get('/download/:id', async (req, res) => {
   try {
     const patch = await Patch.findByPk(req.params.id);
@@ -484,16 +484,16 @@ async function uploadToCOS(localPath, remotePath) {
 
 ### 功能说明
 
-支持更精细的灰度发布控制。
+支持更精细的灰度发布控制�?
 
 ### 实现方案
 
-#### 1. 按地区灰度
+#### 1. 按地区灰�?
 
 ```javascript
 // patch-server/backend/src/services/rollout.js
 function shouldRollout(patch, device) {
-  // 按地区灰度
+  // 按地区灰�?
   if (patch.rolloutRegions && patch.rolloutRegions.length > 0) {
     if (!patch.rolloutRegions.includes(device.region)) {
       return false;
@@ -512,11 +512,11 @@ function shouldRollout(patch, device) {
 }
 ```
 
-#### 2. 按设备型号灰度
+#### 2. 按设备型号灰�?
 
 ```javascript
 function shouldRollout(patch, device) {
-  // 按设备型号灰度
+  // 按设备型号灰�?
   if (patch.rolloutModels && patch.rolloutModels.length > 0) {
     if (!patch.rolloutModels.includes(device.model)) {
       return false;
@@ -527,11 +527,11 @@ function shouldRollout(patch, device) {
 }
 ```
 
-#### 3. 按用户标签灰度
+#### 3. 按用户标签灰�?
 
 ```javascript
 function shouldRollout(patch, device, user) {
-  // 按用户标签灰度
+  // 按用户标签灰�?
   if (patch.rolloutTags && patch.rolloutTags.length > 0) {
     const userTags = user.tags || [];
     const hasTag = patch.rolloutTags.some(tag => userTags.includes(tag));
@@ -548,16 +548,16 @@ function shouldRollout(patch, device, user) {
 
 ## 📋 实施计划
 
-### 阶段 1：推送通知（1周）
+### 阶段 1：推送通知�?周）
 
-**Day 1-2**: 选择推送方案（FCM 或 JPush）
-**Day 3-4**: 后端集成推送服务
-**Day 5-6**: Android 客户端集成
-**Day 7**: 测试和调试
+**Day 1-2**: 选择推送方案（FCM �?JPush�?
+**Day 3-4**: 后端集成推送服�?
+**Day 5-6**: Android 客户端集�?
+**Day 7**: 测试和调�?
 
-### 阶段 2：CDN 集成（1周）
+### 阶段 2：CDN 集成�?周）
 
-**Day 1-2**: 选择 CDN 方案（阿里云 OSS 或腾讯云 COS）
+**Day 1-2**: 选择 CDN 方案（阿里云 OSS 或腾讯云 COS�?
 **Day 3-4**: 后端集成 CDN 服务
 **Day 5-6**: 修改上传和下载逻辑
 **Day 7**: 测试和性能优化
@@ -566,15 +566,15 @@ function shouldRollout(patch, device, user) {
 
 **Day 1-2**: 设计灰度策略数据模型
 **Day 3-4**: 实现灰度逻辑
-**Day 5**: 测试和验证
+**Day 5**: 测试和验�?
 
 ---
 
-## 🎯 优先级建议
+## 🎯 优先级建�?
 
 ### 高优先级
 1. **推送通知** - 提升用户体验，及时通知更新
-2. **CDN 集成** - 加速下载，降低服务器压力
+2. **CDN 集成** - 加速下载，降低服务器压�?
 
 ### 中优先级
 3. **高级灰度策略** - 更精细的发布控制
@@ -583,14 +583,15 @@ function shouldRollout(patch, device, user) {
 
 如果资源有限，建议：
 1. 先实现推送通知（用户体验提升明显）
-2. 再实现 CDN 集成（性能提升明显）
-3. 最后实现高级灰度策略（锦上添花）
+2. 再实�?CDN 集成（性能提升明显�?
+3. 最后实现高级灰度策略（锦上添花�?
 
 ---
 
-## 📚 参考资料
+## 📚 参考资�?
 
 - [Firebase Cloud Messaging](https://firebase.google.com/docs/cloud-messaging)
 - [极光推送文档](https://docs.jiguang.cn/jpush/guideline/intro/)
-- [阿里云 OSS 文档](https://help.aliyun.com/product/31815.html)
-- [腾讯云 COS 文档](https://cloud.tencent.com/document/product/436)
+- [阿里�?OSS 文档](https://help.aliyun.com/product/31815.html)
+- [腾讯�?COS 文档](https://cloud.tencent.com/document/product/436)
+

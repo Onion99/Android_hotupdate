@@ -70,7 +70,7 @@ See [PATCH_CLI_TEST.md](PATCH_CLI_TEST.md) for detailed patch-cli test results.
    ```
 3. Open the app and select the patch file
 4. Apply patch using HotUpdateHelper
-5. Verify app updates to v1.3 with âš¡ symbol
+5. Verify app updates to v1.3 with âš?symbol
 
 ### Testing with Android SDK Generated Patch
 1. Install `app-v1.2-release.apk`
@@ -114,8 +114,8 @@ See [PATCH_CLI_TEST.md](PATCH_CLI_TEST.md) for detailed patch-cli test results.
    - Resources require activity restart
 
 4. **Version Verification**
-   - Check version code upgrade (2 â†’ 3)
-   - Verify UI changes (âš¡ symbol added)
+   - Check version code upgrade (2 â†?3)
+   - Verify UI changes (âš?symbol added)
    - Confirm new assets loaded
 
 ## Notes
@@ -137,3 +137,4 @@ See [PATCH_CLI_TEST.md](PATCH_CLI_TEST.md) for detailed patch-cli test results.
 - APKs: `/sdcard/Download/app-v*.apk`
 - Patches: `/sdcard/Download/*.zip`
 - Applied patches: `/data/data/com.orange.update.demo/files/patch/`
+

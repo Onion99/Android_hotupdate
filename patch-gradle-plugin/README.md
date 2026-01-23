@@ -1,19 +1,68 @@
 # Patch Gradle Plugin
 
-Gradle 插件，集成到 Android 构建流程自动生成补丁。
+Gradle 插件，集成到 Android 构建流程自动生成补丁�?
 
-## 功能特性
+## 功能特�?
 
 - **自动集成**: 自动注册补丁生成任务
-- **构建变体支持**: 支持 debug 和 release 构建变体
+- **构建变体支持**: 支持 debug �?release 构建变体
 - **DSL 配置**: 通过 Gradle DSL 配置各种选项
 - **增量构建**: 支持 Gradle 增量构建
 
 ## 安装
 
-### 方式一：使用 JitPack（推荐）
+### 方式一：通过 Gradle Plugin Portal（推荐）
 
-在项目根目录的 `settings.gradle` 中添加 JitPack 仓库：
+在项目根目录�?`settings.gradle` 中配置插件仓库（Gradle 7.0+ 默认已包含）�?
+
+```groovy
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        google()
+        mavenCentral()
+    }
+}
+```
+
+�?app 模块�?`build.gradle` 中应用插件：
+
+```groovy
+plugins {
+    id 'com.android.application'
+    id 'io.github.706412584.patch' version '1.4.0'
+}
+```
+
+### 方式二：通过 Maven Central
+
+在项目根目录�?`build.gradle` 中添加插件依赖：
+
+```groovy
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.9.0'
+        classpath 'io.github.706412584:patch-gradle-plugin:1.3.9'
+    }
+}
+```
+
+�?app 模块�?`build.gradle` 中应用插件：
+
+```groovy
+plugins {
+    id 'com.android.application'
+    id 'io.github.706412584.patch'
+}
+```
+
+### 方式三：使用 JitPack（向后兼容）
+
+在项目根目录�?`settings.gradle` 中添�?JitPack 仓库�?
 
 ```groovy
 dependencyResolutionManagement {
@@ -25,7 +74,7 @@ dependencyResolutionManagement {
 }
 ```
 
-在项目根目录的 `build.gradle` 中添加插件依赖：
+在项目根目录�?`build.gradle` 中添加插件依赖：
 
 ```groovy
 buildscript {
@@ -35,9 +84,9 @@ buildscript {
 }
 ```
 
-### 方式二：使用本地项目依赖
+### 方式四：使用本地项目依赖
 
-在项目根目录的 `build.gradle` 中添加：
+在项目根目录�?`build.gradle` 中添加：
 
 ```groovy
 buildscript {
@@ -47,12 +96,12 @@ buildscript {
 }
 ```
 
-### 在 app 模块的 build.gradle 中应用插件
+### �?app 模块�?build.gradle 中应用插�?
 
 ```groovy
 plugins {
     id 'com.android.application'
-    id 'com.orange.patch'
+    id 'io.github.706412584.patch'
 }
 ```
 
@@ -90,10 +139,10 @@ patchGenerator {
 ### 生成补丁
 
 ```bash
-# 生成 debug 变体的补丁
+# 生成 debug 变体的补�?
 ./gradlew generateDebugPatch
 
-# 生成 release 变体的补丁
+# 生成 release 变体的补�?
 ./gradlew generateReleasePatch
 ```
 
@@ -105,7 +154,7 @@ patchGenerator {
 
 ## 配置选项
 
-| 选项 | 类型 | 说明 | 默认值 |
+| 选项 | 类型 | 说明 | 默认�?|
 |------|------|------|--------|
 | `baselineApk` | File | 基线 APK 文件 | 必填 |
 | `outputDir` | File | 输出目录 | build/patch |
@@ -123,7 +172,7 @@ patchGenerator {
 // app/build.gradle
 plugins {
     id 'com.android.application'
-    id 'com.orange.patch'
+    id 'io.github.706412584.patch'
 }
 
 android {
@@ -155,7 +204,7 @@ patchGenerator {
     enabled = true
 }
 
-// 在 assembleRelease 后自动生成补丁
+// �?assembleRelease 后自动生成补�?
 tasks.named("assembleRelease").configure {
     finalizedBy("generateReleasePatch")
 }
@@ -206,7 +255,7 @@ generateReleasePatch
 
 ## 输出
 
-补丁文件将输出到配置的 `outputDir` 目录：
+补丁文件将输出到配置�?`outputDir` 目录�?
 
 ```
 build/patch/
@@ -214,6 +263,46 @@ build/patch/
 └── patch-release-1.0.1.patch
 ```
 
-## 许可证
+## 许可�?
 
 Apache License 2.0
+
+
+## 发布信息
+
+### Maven Central
+
+```groovy
+implementation 'io.github.706412584:patch-gradle-plugin:1.3.9'
+```
+
+- **Group ID**: `io.github.706412584`
+- **Artifact ID**: `patch-gradle-plugin`
+- **Latest Version**: `1.3.9`
+- **Repository**: https://repo1.maven.org/maven2/io/github/706412584/patch-gradle-plugin/
+
+### Gradle Plugin Portal
+
+```groovy
+plugins {
+    id 'io.github.706412584.patch' version '1.3.9'
+}
+```
+
+- **Plugin ID**: `io.github.706412584.patch`
+- **Latest Version**: `1.3.9`
+- **Plugin Page**: https://plugins.gradle.org/plugin/io.github.706412584.patch
+
+### 发布指南
+
+如果你是项目维护者，想要发布新版本，请参考：
+- [发布指南](PUBLISH_GUIDE.md) - 详细的发布步骤和说明
+
+## 相关链接
+
+- **项目主页**: https://github.com/706412584/Android_hotupdate
+- **Maven Central**: https://central.sonatype.com/artifact/io.github.706412584/patch-gradle-plugin
+- **Gradle Plugin Portal**: https://plugins.gradle.org/plugin/io.github.706412584.patch
+- **问题反馈**: https://github.com/706412584/Android_hotupdate/issues
+
+

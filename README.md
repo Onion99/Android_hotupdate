@@ -1,4 +1,4 @@
-# Android 热更新补丁工具
+﻿# Android 热更新补丁工具
 
 中文 | [English](README_EN.md)
 
@@ -65,10 +65,10 @@
 ```groovy
 dependencies {
     // 热更新核心库
-    implementation 'io.github.706412584:update:1.3.9'
+    implementation 'io.github.706412584:update:1.4.0'
     
     // 如果需要在设备上生成补丁（可选，但不推荐，推荐直接使用官方demo的apk）：
-    implementation 'io.github.706412584:patch-generator-android:1.3.9'
+    implementation 'io.github.706412584:patch-generator-android:1.4.0'
     
 }
 ```
@@ -77,11 +77,11 @@ dependencies {
 
 | 组件 | Maven 坐标 | 说明 |
 |------|-----------|------|
-| **update** | `io.github.706412584:update:1.3.9` | 热更新核心库，必需 |
-| **patch-generator-android** | `io.github.706412584:patch-generator-android:1.3.9` | 设备端补丁生成 |
-| **patch-native** | `io.github.706412584:patch-native:1.3.9` | Native 高性能引擎（AAR） |
-| **patch-core** | `io.github.706412584:patch-core:1.3.9` | 核心补丁引擎 |
-| **patch-cli** | [下载 JAR](https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.3.9/patch-cli-1.3.9-all.jar) | 命令行工具（独立运行） |
+| **update** | `io.github.706412584:update:1.4.0` | 热更新核心库，必需 |
+| **patch-generator-android** | `io.github.706412584:patch-generator-android:1.4.0` | 设备端补丁生成 |
+| **patch-native** | `io.github.706412584:patch-native:1.4.0` | Native 高性能引擎（AAR） |
+| **patch-core** | `io.github.706412584:patch-core:1.4.0` | 核心补丁引擎 |
+| **patch-cli** | [下载 JAR](https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.4.0/patch-cli-1.4.0-all.jar) | 命令行工具（独立运行） |
 
 > 💡 **提示**：
 > - `update` 库已包含基本功能，大多数情况下只需要这一个依赖
@@ -94,10 +94,10 @@ dependencies {
 
 ```bash
 # 下载 patch-cli
-wget https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.3.9/patch-cli-1.3.9-all.jar
+wget https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.4.0/patch-cli-1.4.0-all.jar
 
 # 生成带签名的补丁
-java -jar patch-cli-1.3.9-all.jar \
+java -jar patch-cli-1.4.0-all.jar \
   --base app-v1.0.apk \
   --new app-v1.1.apk \
   --output patch.zip \
@@ -129,7 +129,22 @@ generator.generateInBackground();
 
 **方式三：使用 Gradle 插件（构建时生成）**
 
-```gradle
+```groovy
+// 方式 A：通过 Gradle Plugin Portal（推荐）
+plugins {
+    id 'com.android.application'
+    id 'io.github.706412584.patch' version '1.4.0'
+}
+
+// 方式 B：通过 Maven Central
+buildscript {
+    dependencies {
+        classpath 'io.github.706412584:patch-gradle-plugin:1.4.0'
+    }
+}
+apply plugin: 'io.github.706412584.patch'
+
+// 配置补丁生成
 patchGenerator {
     baselineApk = file("baseline/app-v1.0.apk")
     outputDir = file("build/patch")
@@ -141,9 +156,12 @@ patchGenerator {
         keyPassword = "password"
     }
 }
+
+// 生成补丁
+// ./gradlew generateReleasePatch
 ```
 
-> 📖 **详细说明**：[patch-cli 使用文档](patch-cli/README.md)
+> 📖 **详细说明**：[patch-cli 使用文档](patch-cli/README.md) | [Gradle 插件文档](patch-gradle-plugin/README.md)
 
 ### 3. 应用补丁
 
@@ -321,15 +339,20 @@ helper.applyPatch(patchFile, callback);
 **使用自定义密码加密（推荐）：**
 
 ```java
-// 加密补丁
-SecurityManager securityManager = new SecurityManager(context);
+// 生成补丁时加密（使用 PatchEncryptor）
+PatchEncryptor encryptor = new PatchEncryptor(context);
 String password = "your_secure_password";
-File encryptedPatch = securityManager.encryptPatchWithPassword(patchFile, password);
+File encryptedPatch = encryptor.encryptPatchWithPassword(patchFile, password);
 
-// 应用加密补丁
+// 应用加密补丁时解密（使用 SecurityManager）
 HotUpdateHelper helper = new HotUpdateHelper(context);
 helper.applyPatchWithAesPassword(encryptedPatch, password, callback);
 ```
+
+> 💡 **架构说明**：
+> - **PatchEncryptor**（`patch-generator-android` 模块）：用于生成补丁时加密
+> - **SecurityManager**（`update` 模块）：用于应用补丁时解密
+> - 两个类使用相同的加密算法（AES-256-GCM + PBKDF2），确保兼容性
 
 **使用 ZIP 密码保护（兼容性最好）：**
 
@@ -407,12 +430,12 @@ if (intent != null) {
 
 | 模块 | 说明 | 文档 |
 |------|------|------|
-| **patch-generator-android** | Android SDK，设备端补丁生成 | [README](patch-generator-android/README.md) |
-| **update** | 热更新 SDK，补丁应用和加载 | - |
+| **patch-generator-android** | Android SDK，设备端补丁生成，包含 `PatchEncryptor` 用于加密补丁 | [README](patch-generator-android/README.md) |
+| **update** | 热更新 SDK，补丁应用和加载，包含 `SecurityManager` 用于解密补丁 | - |
 | **patch-core** | 核心引擎，APK 解析、差异比较 | [README](patch-core/README.md) |
 | **patch-native** | Native SO 库，BsDiff 算法 | [README](patch-native/README.md) |
-| **patch-cli** | 命令行工具，独立运行，[可直接下载](https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.3.7/patch-cli-1.3.7-all.jar) | [README](patch-cli/README.md) |
-| **patch-gradle-plugin** | Gradle 插件，构建集成 | [README](patch-gradle-plugin/README.md) |
+| **patch-cli** | 命令行工具，独立运行，[可直接下载](https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.4.0/patch-cli-1.4.0-all.jar) | [README](patch-cli/README.md) |
+| **patch-gradle-plugin** | Gradle 插件，构建集成，[已发布到 Maven Central 和 Plugin Portal](https://plugins.gradle.org/plugin/io.github.706412584.patch) | [README](patch-gradle-plugin/README.md) \| [发布指南](patch-gradle-plugin/PUBLISH_GUIDE.md) |
 | **patch-server** | 🆕 补丁管理服务端，Web 管理后台 + RESTful API | [README](patch-server/README.md) |
 
 ## 🌐 补丁管理服务端（新增）
