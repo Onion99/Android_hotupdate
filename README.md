@@ -148,7 +148,20 @@ val generator = AndroidPatchGenerator.Builder(context)
         override fun onComplete(result: PatchResult) {
             if (result.isSuccess) {
                 Log.i(TAG, "补丁生成成功")
-         
+            }
+        }
+        
+        override fun onError(message: String) {
+            Log.e(TAG, "补丁生成失败: $message")
+        }
+    })
+    .build()
+
+generator.generateInBackground()
+```
+</details>
+
+**方式三：使用 Gradle 插件（构建时生成）**
 
 ```groovy
 // 方式 A：通过 Gradle Plugin Portal（推荐）
