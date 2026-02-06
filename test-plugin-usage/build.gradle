@@ -1,0 +1,60 @@
+// 测试方式 A：通过 Gradle Plugin Portal（使用本地 mavenLocal）
+plugins {
+    id 'com.android.application' version '8.12.0'
+    id 'io.github.706412584.patch' version '1.4.0'
+}
+
+android {
+    namespace 'com.orange.update'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.orange.update"
+        minSdk 21
+        targetSdk 34
+        versionCode 2
+        versionName "1.6"
+    }
+
+    signingConfigs {
+        release {
+            storeFile file('../test_assets/smlieapp.jks')
+            storePassword '123123'
+            keyAlias 'smlieapp'
+            keyPassword '123123'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+    
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+
+// 配置补丁生成
+// 使用现有的测试 APK 文件来验证插件功能
+patchGenerator {
+    baselineApk = file("../test_assets/app-v1.5.apk")
+    // 注意：插件会自动使用 assembleRelease 生成的 APK
+    // 但由于测试项目 APK 太小，我们需要修改插件支持手动指定 newApk
+    // 或者直接使用 patch-cli 来测试
+    outputDir = file("../test_assets/plugin-output")
+    
+    signing {
+        keystoreFile = file("../test_assets/smlieapp.jks")
+        keystorePassword = "123123"
+        keyAlias = "smlieapp"
+        keyPassword = "123123"
+    }
+    
+    engine = "auto"
+    patchMode = "full_dex"
+    enabled = true
+}
