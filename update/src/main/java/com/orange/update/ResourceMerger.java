@@ -183,12 +183,9 @@ public class ResourceMerger {
             return;
         }
         
-        // 其他文件保持原始的压缩方式
-        newEntry.setMethod(entry.getMethod());
-        if (entry.getMethod() == ZipEntry.STORED) {
-            newEntry.setSize(entry.getSize());
-            newEntry.setCrc(entry.getCrc());
-        }
+        // 其他文件：使用 DEFLATED 压缩方式
+        // 注意：不要保持原始压缩方式，因为可能导致资源路径映射错误
+        newEntry.setMethod(ZipEntry.DEFLATED);
         
         zos.putNextEntry(newEntry);
         
@@ -229,8 +226,20 @@ public class ResourceMerger {
             return false;
         }
         
-        // 其他所有文件都视为资源相关
-        // 包括：resources.arsc, res/, assets/, AndroidManifest.xml 等
+        // 包含以下资源：
+        // - resources.arsc (资源索引表)
+        // - res/ (所有资源文件，包括 AppCompat 等库的资源)
+        // - assets/ (资产文件)
+        // - AndroidManifest.xml (清单文件)
+        // - 其他根目录文件
+        
+        // 特别注意：确保包含所有 res/ 下的资源，包括：
+        // - res/drawable/
+        // - res/drawable-v21/
+        // - res/layout/
+        // - res/values/
+        // 等等，这些都是 AppCompat 和其他库需要的
+        
         return true;
     }
 }

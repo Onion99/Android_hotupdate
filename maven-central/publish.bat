@@ -73,7 +73,7 @@ exit /b 1
 :QUICK_PUBLISH
 echo.
 echo ========================================
-echo Quick Publish (5 modules)
+echo Quick Publish (6 modules)
 echo ========================================
 echo.
 echo Publishing modules:
@@ -81,11 +81,12 @@ echo   - patch-core (Core patch library)
 echo   - patch-native (Native C++ engine)
 echo   - patch-generator-android (Android patch generator)
 echo   - patch-cli (Command-line tool)
+echo   - patch-gradle-plugin (Gradle plugin)
 echo   - update (Hot update core library)
 echo.
 echo [1/3] Publishing to local repository...
 cd ..
-call gradlew.bat :patch-core:publishMavenPublicationToLocalRepository :patch-native:publishMavenPublicationToLocalRepository :patch-generator-android:publishMavenPublicationToLocalRepository :patch-cli:publishMavenPublicationToLocalRepository :update:publishMavenPublicationToLocalRepository
+call gradlew.bat :patch-core:publishMavenPublicationToLocalRepository :patch-native:publishMavenPublicationToLocalRepository :patch-generator-android:publishMavenPublicationToLocalRepository :patch-cli:publishMavenPublicationToLocalRepository :patch-gradle-plugin:publishPluginMavenPublicationToLocalRepository :update:publishMavenPublicationToLocalRepository
 if errorlevel 1 (
     echo [ERROR] Publish failed
     pause
@@ -108,6 +109,10 @@ xcopy /E /I /Y "io" "..\..\..\temp_bundle_build\io"
 cd ..\..\..
 
 cd patch-cli\build\repo
+xcopy /E /I /Y "io" "..\..\..\temp_bundle_build\io"
+cd ..\..\..
+
+cd patch-gradle-plugin\build\repo
 xcopy /E /I /Y "io" "..\..\..\temp_bundle_build\io"
 cd ..\..\..
 
@@ -150,12 +155,14 @@ echo   - patch-core:%VERSION%
 echo   - patch-native:%VERSION% (AAR with native SO libraries)
 echo   - patch-generator-android:%VERSION%
 echo   - patch-cli:%VERSION% (with -all classifier for fat JAR)
+echo   - patch-gradle-plugin:%VERSION%
 echo   - update:%VERSION%
 echo.
 echo Next steps:
 echo   1. Visit https://central.sonatype.com/publishing/deployments
 echo   2. Wait for validation (about 2-5 minutes)
 echo   3. Click "Publish" to release
+echo   4. Run publish-plugin.bat to also publish to Gradle Plugin Portal
 echo.
 cd ..
 pause
@@ -164,7 +171,7 @@ exit /b 0
 :FULL_PUBLISH
 echo.
 echo ========================================
-echo Full Publish (5 modules)
+echo Full Publish (6 modules)
 echo ========================================
 echo.
 echo Publishing modules:
@@ -172,6 +179,7 @@ echo   - patch-core (Core patch library)
 echo   - patch-native (Native C++ engine)
 echo   - patch-generator-android (Android patch generator)
 echo   - patch-cli (Command-line tool)
+echo   - patch-gradle-plugin (Gradle plugin)
 echo   - update (Hot update core library)
 echo.
 echo [1/5] Cleaning build...
@@ -184,7 +192,7 @@ call gradlew.bat build -x test
 
 echo.
 echo [3/5] Publishing to local repository...
-call gradlew.bat :patch-core:publishMavenPublicationToLocalRepository :patch-native:publishMavenPublicationToLocalRepository :patch-generator-android:publishMavenPublicationToLocalRepository :patch-cli:publishMavenPublicationToLocalRepository :update:publishMavenPublicationToLocalRepository
+call gradlew.bat :patch-core:publishMavenPublicationToLocalRepository :patch-native:publishMavenPublicationToLocalRepository :patch-generator-android:publishMavenPublicationToLocalRepository :patch-cli:publishMavenPublicationToLocalRepository :patch-gradle-plugin:publishPluginMavenPublicationToLocalRepository :update:publishMavenPublicationToLocalRepository
 if errorlevel 1 (
     echo [ERROR] Build failed
     pause
@@ -207,6 +215,10 @@ xcopy /E /I /Y "io" "..\..\..\temp_bundle_build\io"
 cd ..\..\..
 
 cd patch-cli\build\repo
+xcopy /E /I /Y "io" "..\..\..\temp_bundle_build\io"
+cd ..\..\..
+
+cd patch-gradle-plugin\build\repo
 xcopy /E /I /Y "io" "..\..\..\temp_bundle_build\io"
 cd ..\..\..
 
@@ -249,12 +261,14 @@ echo   - patch-core:%VERSION%
 echo   - patch-native:%VERSION% (AAR with native SO libraries)
 echo   - patch-generator-android:%VERSION%
 echo   - patch-cli:%VERSION% (with -all classifier for fat JAR)
+echo   - patch-gradle-plugin:%VERSION%
 echo   - update:%VERSION%
 echo.
 echo Next steps:
 echo   1. Visit https://central.sonatype.com/publishing/deployments
 echo   2. Wait for validation (about 2-5 minutes)
 echo   3. Click "Publish" to release
+echo   4. Run publish-plugin.bat to also publish to Gradle Plugin Portal
 echo.
 cd ..
 pause

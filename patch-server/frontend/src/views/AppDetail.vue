@@ -1555,17 +1555,25 @@ const updateSecurityConfig = async () => {
       key_password: app.value.key_password
     });
     
-    // 更新加密配置
-    if (app.value.require_encryption) {
-      await api.updateEncryptionConfig(route.params.id, {
-        enabled: true,
-        key: encryptionKey.value
-      });
-    } else {
-      await api.updateEncryptionConfig(route.params.id, {
-        enabled: false,
-        key: null
-      });
+    // 更新加密配置（只在开启加密或需要清除密钥时调用）
+    try {
+      if (app.value.require_encryption && encryptionKey.value) {
+        // 开启加密且有密钥
+        await api.updateEncryptionConfig(route.params.id, {
+          enabled: true,
+          key: encryptionKey.value
+        });
+      } else if (!app.value.require_encryption) {
+        // 关闭加密，清除密钥
+        await api.updateEncryptionConfig(route.params.id, {
+          enabled: false,
+          key: null
+        });
+      }
+    } catch (encError) {
+      console.error('更新加密配置失败:', encError);
+      ElMessage.warning('签名配置已保存，但加密配置更新失败');
+      // 不要 return，继续执行后续逻辑
     }
     
     ElMessage.success('安全配置已保存');

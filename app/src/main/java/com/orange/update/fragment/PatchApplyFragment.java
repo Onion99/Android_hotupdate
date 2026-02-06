@@ -268,39 +268,72 @@ public class PatchApplyFragment extends Fragment {
      * 显示安全策略错误对话框
      */
     private void showSecurityPolicyError(PatchApplyViewModel.SecurityPolicyError error) {
-        new androidx.appcompat.app.AlertDialog.Builder(requireContext())
-            .setTitle("⚠️ 安全策略限制")
-            .setMessage(error.message)
-            .setPositiveButton("确定", null)
-            .setNeutralButton("安全设置", (d, w) -> {
-                // 跳转到系统信息 Fragment 的安全设置
-                // 这里可以通过 Navigation 或者 Activity 方法跳转
-                if (getActivity() != null) {
-                    DialogHelper.showToast(requireContext(), "请在「系统信息」页面修改安全策略");
-                }
-            })
-            .setIcon(android.R.drawable.ic_dialog_alert)
-            .show();
+        try {
+            new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle("⚠️ 安全策略限制")
+                .setMessage(error.message)
+                .setPositiveButton("确定", null)
+                .setNeutralButton("安全设置", (d, w) -> {
+                    // 跳转到系统信息 Fragment 的安全设置
+                    // 这里可以通过 Navigation 或者 Activity 方法跳转
+                    if (getActivity() != null) {
+                        DialogHelper.showToast(requireContext(), "请在「系统信息」页面修改安全策略");
+                    }
+                })
+                .setIcon(android.R.drawable.ic_dialog_alert)
+                .show();
+        } catch (android.content.res.Resources.NotFoundException e) {
+            // 资源加载失败，使用系统对话框
+            android.util.Log.w("PatchApplyFragment", "AppCompat dialog failed, using system dialog", e);
+            new android.app.AlertDialog.Builder(requireContext())
+                .setTitle("⚠️ 安全策略限制")
+                .setMessage(error.message)
+                .setPositiveButton("确定", null)
+                .setNeutralButton("安全设置", (d, w) -> {
+                    if (getActivity() != null) {
+                        DialogHelper.showToast(requireContext(), "请在「系统信息」页面修改安全策略");
+                    }
+                })
+                .show();
+        }
     }
     
     /**
      * 显示重启提示对话框
      */
     private void showRestartPrompt() {
-        new androidx.appcompat.app.AlertDialog.Builder(requireContext())
-            .setTitle("🔥 热更新成功")
-            .setMessage("补丁已成功应用！\n\n" +
-                       "检测到资源文件更新，建议重启应用以确保资源正确加载。\n\n" +
-                       "是否立即重启应用？")
-            .setPositiveButton("立即重启", (d, w) -> {
-                restartApp();
-            })
-            .setNegativeButton("稍后重启", (d, w) -> {
-                DialogHelper.showToast(requireContext(), "请稍后手动重启应用");
-            })
-            .setCancelable(false)
-            .setIcon(android.R.drawable.ic_dialog_info)
-            .show();
+        try {
+            new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle("🔥 热更新成功")
+                .setMessage("补丁已成功应用！\n\n" +
+                           "检测到资源文件更新，建议重启应用以确保资源正确加载。\n\n" +
+                           "是否立即重启应用？")
+                .setPositiveButton("立即重启", (d, w) -> {
+                    restartApp();
+                })
+                .setNegativeButton("稍后重启", (d, w) -> {
+                    DialogHelper.showToast(requireContext(), "请稍后手动重启应用");
+                })
+                .setCancelable(false)
+                .setIcon(android.R.drawable.ic_dialog_info)
+                .show();
+        } catch (android.content.res.Resources.NotFoundException e) {
+            // 资源加载失败，使用系统对话框
+            android.util.Log.w("PatchApplyFragment", "AppCompat dialog failed, using system dialog", e);
+            new android.app.AlertDialog.Builder(requireContext())
+                .setTitle("🔥 热更新成功")
+                .setMessage("补丁已成功应用！\n\n" +
+                           "检测到资源文件更新，建议重启应用以确保资源正确加载。\n\n" +
+                           "是否立即重启应用？")
+                .setPositiveButton("立即重启", (d, w) -> {
+                    restartApp();
+                })
+                .setNegativeButton("稍后重启", (d, w) -> {
+                    DialogHelper.showToast(requireContext(), "请稍后手动重启应用");
+                })
+                .setCancelable(false)
+                .show();
+        }
     }
     
     /**
