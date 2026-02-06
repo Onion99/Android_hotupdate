@@ -109,7 +109,7 @@ java -jar patch-cli-1.4.0-all.jar \
 
 **方式二：使用 Android SDK（设备端生成）**
 
-<details>
+<details open>
 <summary><b>Java 示例</b></summary>
 
 ```java
@@ -136,7 +136,7 @@ generator.generateInBackground();
 ```
 </details>
 
-<details>
+<details open>
 <summary><b>Kotlin 示例</b></summary>
 
 ```kotlin
@@ -195,7 +195,7 @@ patchGenerator {
 
 **方式一：使用单例模式（推荐）** 🆕
 
-<details>
+<details open>
 <summary><b>Java 示例</b></summary>
 
 ```java
@@ -242,7 +242,7 @@ HotUpdateHelper.getInstance().applyPatch(patchFile, new HotUpdateHelper.Callback
 ```
 </details>
 
-<details>
+<details open>
 <summary><b>Kotlin 示例</b></summary>
 
 ```kotlin
@@ -289,7 +289,7 @@ HotUpdateHelper.getInstance().applyPatch(patchFile, object : HotUpdateHelper.Cal
 
 **方式二：直接创建实例（向后兼容）**
 
-<details>
+<details open>
 <summary><b>Java 示例</b></summary>
 
 ```java
@@ -319,7 +319,7 @@ helper.applyPatch(patchFile, new HotUpdateHelper.Callback() {
 ```
 </details>
 
-<details>
+<details open>
 <summary><b>Kotlin 示例</b></summary>
 
 ```kotlin

@@ -134,7 +134,7 @@ java -jar patch-cli-1.4.0-all.jar \
 
 **Method 2: Using Android SDK (On-Device Generation)**
 
-<details>
+<details open>
 <summary><b>Java Example</b></summary>
 
 ```java
@@ -161,7 +161,7 @@ generator.generate();
 ```
 </details>
 
-<details>
+<details open>
 <summary><b>Kotlin Example</b></summary>
 
 ```kotlin
@@ -233,7 +233,7 @@ patchGenerator {
 
 **Recommended: Singleton Pattern (Elegant API)**
 
-<details>
+<details open>
 <summary><b>Java Example</b></summary>
 
 ```java
@@ -278,7 +278,7 @@ public class MyApplication extends Application {
 ```
 </details>
 
-<details>
+<details open>
 <summary><b>Kotlin Example</b></summary>
 
 ```kotlin
