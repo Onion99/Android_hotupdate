@@ -101,11 +101,12 @@ dependencies {
 
 | Component | Maven Coordinates | Description |
 |-----------|------------------|-------------|
-| **update** | `io.github.706412584:update:1.3.8` | Hot update core library, required |
-| **patch-generator-android** | `io.github.706412584:patch-generator-android:1.3.8` | On-device patch generation |
-| **patch-native** | `io.github.706412584:patch-native:1.3.8` | Native high-performance engine (AAR) |
-| **patch-core** | `io.github.706412584:patch-core:1.3.8` | Core patch engine |
-| **patch-cli** | [Download JAR](https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.3.8/patch-cli-1.3.8-all.jar) | Command-line tool (standalone) |
+| **update** | `io.github.706412584:update:1.4.0` | Hot update core library, required |
+| **patch-generator-android** | `io.github.706412584:patch-generator-android:1.4.0` | On-device patch generation |
+| **patch-native** | `io.github.706412584:patch-native:1.4.0` | Native high-performance engine (AAR) |
+| **patch-core** | `io.github.706412584:patch-core:1.4.0` | Core patch engine |
+| **patch-cli** | [Download JAR](https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.4.0/patch-cli-1.4.0-all.jar) | Command-line tool (standalone) |
+| **patch-gradle-plugin** | `io.github.706412584:patch-gradle-plugin:1.4.0` | Gradle plugin for build integration |
 
 > ?? **Tips**:
 > - The `update` library includes basic functionality, most cases only need this dependency
@@ -118,10 +119,10 @@ dependencies {
 
 ```bash
 # Download patch-cli
-wget https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.3.8/patch-cli-1.3.8-all.jar
+wget https://repo1.maven.org/maven2/io/github/706412584/patch-cli/1.4.0/patch-cli-1.4.0-all.jar
 
 # Generate signed patch
-java -jar patch-cli-1.3.8-all.jar \
+java -jar patch-cli-1.4.0-all.jar \
   --base app-v1.0.apk \
   --new app-v1.1.apk \
   --output patch.zip \
@@ -132,6 +133,9 @@ java -jar patch-cli-1.3.8-all.jar \
 ```
 
 **Method 2: Using Android SDK (On-Device Generation)**
+
+<details>
+<summary><b>Java Example</b></summary>
 
 ```java
 AndroidPatchGenerator generator = new AndroidPatchGenerator.Builder(context)
@@ -155,10 +159,82 @@ AndroidPatchGenerator generator = new AndroidPatchGenerator.Builder(context)
 
 generator.generate();
 ```
+</details>
+
+<details>
+<summary><b>Kotlin Example</b></summary>
+
+```kotlin
+val generator = AndroidPatchGenerator.Builder(context)
+    .baseApk(baseApkFile)
+    .newApk(newApkFile)
+    .output(patchFile)
+    .callback(object : SimpleAndroidGeneratorCallback() {
+        override fun onComplete(result: PatchResult) {
+            if (result.isSuccess) {
+                Log.i(TAG, "Patch generated successfully")
+            }
+        }
+        
+        override fun onError(message: String) {
+            Log.e(TAG, "Patch generation failed: $message")
+        }
+    })
+    .build()
+
+generator.generate()
+```
+</details>
+
+**Method 3: Using Gradle Plugin (Build-Time Generation)**
+
+```groovy
+// Method A: Via Gradle Plugin Portal (Recommended)
+plugins {
+    id 'com.android.application'
+    id 'io.github.706412584.patch' version '1.4.0'
+}
+
+// Method B: Via Maven Central
+buildscript {
+    dependencies {
+        classpath 'io.github.706412584:patch-gradle-plugin:1.4.0'
+    }
+}
+apply plugin: 'io.github.706412584.patch'
+
+// Configure patch generation
+patchGenerator {
+    baselineApk = file("baseline/app-v1.0.apk")  // Baseline APK (previous release)
+    outputDir = file("build/patch")              // Patch output directory
+    
+    signing {
+        keystoreFile = file("keystore.jks")      // Keystore file
+        keystorePassword = "password"            // Keystore password
+        keyAlias = "alias"                       // Key alias
+        keyPassword = "password"                 // Key password
+    }
+    
+    engine = "auto"        // Engine type: auto, java, native (default: auto)
+    patchMode = "full_dex" // Patch mode: full_dex, bsdiff (default: full_dex)
+    enabled = true         // Enable plugin (default: true)
+}
+
+// Generate patch
+// ./gradlew generateDebugPatch   # Generate debug patch
+// ./gradlew generateReleasePatch # Generate release patch
+```
+
+> 📖 **Documentation**: [patch-cli Guide](patch-cli/README.md) | [Gradle Plugin Guide](patch-gradle-plugin/README.md)
+> 
+> ✅ **Verified**: Plugin published to [Maven Central](https://central.sonatype.com/artifact/io.github.706412584/patch-gradle-plugin) and [Gradle Plugin Portal](https://plugins.gradle.org/plugin/io.github.706412584.patch), tested and working
 
 ### 3. Apply Patch
 
 **Recommended: Singleton Pattern (Elegant API)**
+
+<details>
+<summary><b>Java Example</b></summary>
 
 ```java
 public class MyApplication extends Application {
@@ -200,6 +276,47 @@ public class MyApplication extends Application {
     }
 }
 ```
+</details>
+
+<details>
+<summary><b>Kotlin Example</b></summary>
+
+```kotlin
+class MyApplication : Application() {
+    
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(base)
+        
+        // Initialize HotUpdateHelper (call once)
+        HotUpdateHelper.init(this)
+        
+        // Load applied patch (if any)
+        HotUpdateHelper.getInstance().loadPatchIfNeeded()
+    }
+    
+    override fun onCreate() {
+        super.onCreate()
+        
+        // Apply patch when needed
+        val patchFile = File("/path/to/patch.zip")
+        HotUpdateHelper.getInstance().applyPatch(patchFile, object : HotUpdateHelper.Callback {
+            override fun onProgress(percent: Int, message: String) {
+                Log.d(TAG, "Progress: $percent% - $message")
+            }
+            
+            override fun onSuccess(result: PatchResult) {
+                Log.i(TAG, "Hot update successful!")
+                // Restart app or notify user
+            }
+            
+            override fun onError(message: String) {
+                Log.e(TAG, "Hot update failed: $message")
+            }
+        })
+    }
+}
+```
+</details>
 
 **Alternative: Traditional Method**
 

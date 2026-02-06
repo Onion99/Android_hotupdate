@@ -109,6 +109,9 @@ java -jar patch-cli-1.4.0-all.jar \
 
 **方式二：使用 Android SDK（设备端生成）**
 
+<details>
+<summary><b>Java 示例</b></summary>
+
 ```java
 AndroidPatchGenerator generator = new AndroidPatchGenerator.Builder(context)
     .baseApk(baseApkFile)
@@ -121,13 +124,31 @@ AndroidPatchGenerator generator = new AndroidPatchGenerator.Builder(context)
                 Log.i(TAG, "补丁生成成功");
             }
         }
+        
+        @Override
+        public void onError(String message) {
+            Log.e(TAG, "补丁生成失败: " + message);
+        }
     })
     .build();
 
 generator.generateInBackground();
 ```
+</details>
 
-**方式三：使用 Gradle 插件（构建时生成）**
+<details>
+<summary><b>Kotlin 示例</b></summary>
+
+```kotlin
+val generator = AndroidPatchGenerator.Builder(context)
+    .baseApk(baseApkFile)
+    .newApk(newApkFile)
+    .output(patchFile)
+    .callback(object : SimpleAndroidGeneratorCallback() {
+        override fun onComplete(result: PatchResult) {
+            if (result.isSuccess) {
+                Log.i(TAG, "补丁生成成功")
+         
 
 ```groovy
 // 方式 A：通过 Gradle Plugin Portal（推荐）
@@ -146,26 +167,36 @@ apply plugin: 'io.github.706412584.patch'
 
 // 配置补丁生成
 patchGenerator {
-    baselineApk = file("baseline/app-v1.0.apk")
-    outputDir = file("build/patch")
+    baselineApk = file("baseline/app-v1.0.apk")  // 基线 APK（上一个发布版本）
+    outputDir = file("build/patch")              // 补丁输出目录
     
     signing {
-        keystoreFile = file("keystore.jks")
-        keystorePassword = "password"
-        keyAlias = "alias"
-        keyPassword = "password"
+        keystoreFile = file("keystore.jks")      // 签名文件
+        keystorePassword = "password"            // 密钥库密码
+        keyAlias = "alias"                       // 密钥别名
+        keyPassword = "password"                 // 密钥密码
     }
+    
+    engine = "auto"        // 引擎类型：auto, java, native（默认：auto）
+    patchMode = "full_dex" // 补丁模式：full_dex, bsdiff（默认：full_dex）
+    enabled = true         // 是否启用插件（默认：true）
 }
 
 // 生成补丁
-// ./gradlew generateReleasePatch
+// ./gradlew generateDebugPatch   # 生成 debug 版本补丁
+// ./gradlew generateReleasePatch # 生成 release 版本补丁
 ```
 
 > 📖 **详细说明**：[patch-cli 使用文档](patch-cli/README.md) | [Gradle 插件文档](patch-gradle-plugin/README.md)
+> 
+> ✅ **已验证**：插件已成功发布到 [Maven Central](https://central.sonatype.com/artifact/io.github.706412584/patch-gradle-plugin) 和 [Gradle Plugin Portal](https://plugins.gradle.org/plugin/io.github.706412584.patch)，功能测试通过
 
 ### 3. 应用补丁
 
 **方式一：使用单例模式（推荐）** 🆕
+
+<details>
+<summary><b>Java 示例</b></summary>
 
 ```java
 // 在 Application 中初始化
@@ -209,8 +240,57 @@ HotUpdateHelper.getInstance().applyPatch(patchFile, new HotUpdateHelper.Callback
     }
 });
 ```
+</details>
+
+<details>
+<summary><b>Kotlin 示例</b></summary>
+
+```kotlin
+// 在 Application 中初始化
+class MyApplication : Application() {
+    
+    companion object {
+        // 配置应用ID（可选，用于服务端更新检查）
+        private const val APP_ID = "your-app-id"  // 从服务端获取
+    }
+    
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(base)
+        
+        // 方式1：初始化时设置应用ID（推荐）
+        HotUpdateHelper.init(base, APP_ID)
+        
+        // 方式2：不设置应用ID（向后兼容）
+        // HotUpdateHelper.init(base)
+        
+        // 加载已应用的补丁
+        HotUpdateHelper.getInstance().loadPatchIfNeeded()
+    }
+}
+
+// 在 Activity 中使用（无需传 context）
+HotUpdateHelper.getInstance().applyPatch(patchFile, object : HotUpdateHelper.Callback {
+    override fun onProgress(percent: Int, message: String) {
+        Log.d(TAG, "进度: $percent% - $message")
+    }
+    
+    override fun onSuccess(result: HotUpdateHelper.PatchResult) {
+        Log.i(TAG, "热更新成功！")
+        Log.i(TAG, "补丁版本: ${result.patchVersion}")
+        // DEX 和 SO 立即生效，资源更新需要重启应用
+    }
+    
+    override fun onError(message: String) {
+        Log.e(TAG, "热更新失败: $message")
+    }
+})
+```
+</details>
 
 **方式二：直接创建实例（向后兼容）**
+
+<details>
+<summary><b>Java 示例</b></summary>
 
 ```java
 HotUpdateHelper helper = new HotUpdateHelper(context);
@@ -237,6 +317,34 @@ helper.applyPatch(patchFile, new HotUpdateHelper.Callback() {
     }
 });
 ```
+</details>
+
+<details>
+<summary><b>Kotlin 示例</b></summary>
+
+```kotlin
+val helper = HotUpdateHelper(context)
+
+// 可选：设置应用ID（用于服务端更新检查）
+helper.appId = "your-app-id"
+
+helper.applyPatch(patchFile, object : HotUpdateHelper.Callback {
+    override fun onProgress(percent: Int, message: String) {
+        Log.d(TAG, "进度: $percent% - $message")
+    }
+    
+    override fun onSuccess(result: HotUpdateHelper.PatchResult) {
+        Log.i(TAG, "热更新成功！")
+        Log.i(TAG, "补丁版本: ${result.patchVersion}")
+        // DEX 和 SO 立即生效，资源更新需要重启应用
+    }
+    
+    override fun onError(message: String) {
+        Log.e(TAG, "热更新失败: $message")
+    }
+})
+```
+</details>
 
 > 💡 **单例模式优势**：
 > - ✅ 更简洁：初始化后无需每次传 context

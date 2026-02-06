@@ -1,5 +1,6 @@
 plugins {
     id 'com.android.application'
+    id 'io.github.706412584.patch' version '1.4.0'
 }
 
 android {
@@ -83,4 +84,22 @@ dependencies {
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'
     androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+}
+
+
+// 配置补丁生成插件
+patchGenerator {
+    baselineApk = file("../test_assets/app-v1.5.apk")
+    outputDir = file("../test_assets/plugin-output")
+    
+    signing {
+        keystoreFile = file("smlieapp.jks")
+        keystorePassword = "123123"
+        keyAlias = "smlieapp"
+        keyPassword = "123123"
+    }
+    
+    engine = "auto"
+    patchMode = "full_dex"
+    enabled = true
 }
