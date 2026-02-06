@@ -139,4 +139,7 @@ export const api = {
   updatePatchStatus: (id, status) => request.put(`/patches/${id}/status`, { status })
 };
 
-export default request;
+// 导出 api 对象作为默认导出，同时保留 request 实例的方法
+const apiWithRequest = Object.assign(request, api);
+
+export default apiWithRequest;

@@ -516,7 +516,7 @@
           </el-alert>
 
           <el-form-item label="APK 签名验证">
-            <el-switch v-model="app.require_signature" />
+            <el-switch v-model="app.require_signature" :active-value="1" :inactive-value="0" />
             <div style="font-size: 12px; color: #999; margin-top: 4px;">
               开启后，只能应用已签名的补丁
             </div>
@@ -576,7 +576,7 @@
           </template>
 
           <el-form-item label="强制补丁加密">
-            <el-switch v-model="app.require_encryption" />
+            <el-switch v-model="app.require_encryption" :active-value="1" :inactive-value="0" />
             <div style="font-size: 12px; color: #999; margin-top: 4px;">
               开启后，只能应用已加密的补丁
             </div>
