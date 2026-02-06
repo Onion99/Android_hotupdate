@@ -449,8 +449,11 @@ public class PatchStorage {
                 appliedFile.delete();
             }
             
-            // 解密 (API 23+) 或直接复制 (API 21-22)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            // 检查补丁文件是否加密（通过文件扩展名判断）
+            boolean isEncrypted = patchFile.getName().endsWith(".enc");
+            
+            // 解密 (API 23+ 且文件已加密) 或直接复制
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && isEncrypted) {
                 // 解密到临时文件
                 File decryptedFile = securityManager.decryptPatch(patchFile);
                 
@@ -460,10 +463,16 @@ public class PatchStorage {
                     copyFile(decryptedFile, appliedFile);
                     securityManager.secureDelete(decryptedFile);
                 }
+                Log.d(TAG, "Decrypted patch to applied directory: " + patchId);
             } else {
-                // API 21-22 不支持 KeyStore 加密，直接复制
-                Log.w(TAG, "API level < 23, copying patch without decryption");
+                // 文件未加密或 API 21-22，直接复制
+                if (!isEncrypted) {
+                    Log.d(TAG, "Patch is not encrypted, copying directly");
+                } else {
+                    Log.w(TAG, "API level < 23, copying encrypted patch without decryption (may fail)");
+                }
                 copyFile(patchFile, appliedFile);
+                Log.d(TAG, "Copied patch to applied directory: " + patchId);
             }
             
             // 计算并保存文件哈希值（用于完整性验证）
@@ -475,7 +484,6 @@ public class PatchStorage {
                 Log.w(TAG, "Failed to calculate patch hash");
             }
             
-            Log.d(TAG, "Prepared patch to applied directory: " + patchId);
             return appliedFile;
             
         } catch (IOException | SecurityException e) {

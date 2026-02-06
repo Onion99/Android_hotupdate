@@ -1,0 +1,62 @@
+// 测试 patch-gradle-plugin 的配置文件
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+        mavenLocal()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.9.0'
+        // 使用本地项目依赖
+        classpath project(':patch-gradle-plugin')
+    }
+}
+
+plugins {
+    id 'com.android.application'
+    id 'io.github.706412584.patch'
+}
+
+android {
+    namespace 'com.orange.update.test'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.orange.update.test"
+        minSdk 21
+        targetSdk 34
+        versionCode 2
+        versionName "1.6"
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+}
+
+patchGenerator {
+    // 基线 APK（v1.5）
+    baselineApk = file("${rootDir}/test_assets/app-v1.5.apk")
+    
+    // 补丁输出目录
+    outputDir = file("${rootDir}/test_assets/plugin-output")
+    
+    // 签名配置
+    signing {
+        keystoreFile = file("${rootDir}/test_assets/smlieapp.jks")
+        keystorePassword = "smlieapp"
+        keyAlias = "smlieapp"
+        keyPassword = "smlieapp"
+    }
+    
+    // 使用自动引擎选择
+    engine = "auto"
+    
+    // 使用完整 dex 模式
+    patchMode = "full_dex"
+    
+    // 启用插件
+    enabled = true
+}
